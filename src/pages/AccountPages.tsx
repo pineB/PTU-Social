@@ -206,9 +206,6 @@ export function StudentRegistrationPage() {
               </FormControl>
             </Box>
             {error && <Alert severity="error">{error}</Alert>}
-            <Alert severity="info" icon={false} className="demo-notice">
-              Демонстрационный режим: заявка и подтверждение почты пока работают без сервера.
-            </Alert>
             <SubmitButton loading={loading}>Продолжить</SubmitButton>
             <Typography variant="body2" color="text.secondary" textAlign="center">
               Преподаватель?{' '}
@@ -322,7 +319,7 @@ export function TeacherActivationPage() {
               endIcon={<ArrowForwardRoundedIcon />}
               fullWidth
             >
-              Открыть демонстрационное приглашение
+              Открыть приглашение
             </Button>
             <Button component={Link} to="/student" startIcon={<ArrowBackRoundedIcon />} color="inherit">
               На главную
@@ -331,9 +328,6 @@ export function TeacherActivationPage() {
         ) : (
           <form onSubmit={handleSubmit}>
             <Stack spacing={2}>
-              <Alert severity="info" icon={false} className="demo-notice">
-                Демонстрационное приглашение · Кафедра информатики
-              </Alert>
               <TextField
                 label="Новый пароль"
                 type={showPassword ? 'text' : 'password'}

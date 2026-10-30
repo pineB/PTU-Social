@@ -14,6 +14,7 @@ import {
   VerifyEmailPage,
 } from './pages/AccountPages';
 import StudentProfilePage from './pages/StudentProfilePage';
+import { AwardsFeedPage, LeaderboardPage, PublicStudentProfilePage } from './pages/CommunityPages';
 import StudentTasksPage from './pages/StudentTasksPage';
 import TeacherSubmissionsPage from './pages/TeacherSubmissionsPage';
 import { TaskWorkflowProvider } from './data/task-workflow';
@@ -52,6 +53,9 @@ export default function App() {
             <Route index element={<Navigate to="/student" replace />} />
             <Route path="student" element={<StudentDashboard />} />
             <Route path="student/profile" element={<StudentProfilePage />} />
+            <Route path="student/awards" element={<AwardsFeedPage />} />
+            <Route path="student/leaderboard" element={<LeaderboardPage />} />
+            <Route path="student/people/:studentId" element={<PublicStudentProfilePage />} />
             <Route path="student/tasks" element={<StudentTasksPage />} />
             <Route path="student/events" element={<EventsPage />} />
             <Route path="student/group-confirmation" element={<GroupConfirmationPage />} />

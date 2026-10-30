@@ -4,7 +4,7 @@ import {
   Avatar,
   Badge,
   Box,
-  Divider,
+  Button,
   Drawer,
   IconButton,
   List,
@@ -32,12 +32,15 @@ import AccountBalanceWalletRoundedIcon from '@mui/icons-material/AccountBalanceW
 import SportsEsportsRoundedIcon from '@mui/icons-material/SportsEsportsRounded';
 import WorkspacePremiumRoundedIcon from '@mui/icons-material/WorkspacePremiumRounded';
 import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
+import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
+import EmojiEventsRoundedIcon from '@mui/icons-material/EmojiEventsRounded';
+import LeaderboardRoundedIcon from '@mui/icons-material/LeaderboardRounded';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { dashboards, type RoleId } from '../data/dashboards';
 import { useCampusWorkflow } from '../data/campus-workflow';
 import { useColorMode } from '../theme/ColorModeProvider';
 
-const drawerWidth = 256;
+const drawerWidth = 272;
 
 const navigation: { id: RoleId; label: string }[] = [
   { id: 'student', label: 'Студент' },
@@ -49,51 +52,50 @@ const navigation: { id: RoleId; label: string }[] = [
 function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () => void }) {
   const location = useLocation();
   const { isGroupLeader } = useCampusWorkflow();
-  const profile = dashboards[role];
-  const initials = profile.profileName
-    .split(' ')
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('');
+  const isActive = (path: string) => location.pathname === path;
 
   return (
     <Box className="sidebar-content">
       <Box className="brand">
-        <Box className="brand-mark"><SpaceDashboardRoundedIcon /></Box>
+        <Box className="brand-mark"><AutoAwesomeRoundedIcon /></Box>
         <Typography className="brand-name">ПТУ-Сошиал</Typography>
       </Box>
 
-      <List disablePadding>
+      <Box className="workspace-switcher">
         {navigation.map((item) => {
-          const active = location.pathname === `/${item.id}`;
+          const active = role === item.id;
           return (
-            <ListItemButton
+            <Button
               key={item.id}
               component={NavLink}
               to={`/${item.id}`}
               onClick={onNavigate}
-              className={`role-link${active ? ' role-link-active' : ''}`}
+              className={`workspace-link${active ? ' workspace-link-active' : ''}`}
               aria-label={item.label}
               aria-current={active ? 'page' : undefined}
             >
-              <ListItemIcon className="role-icon">
+              <Box className="workspace-icon">
                 {item.id === 'student' ? <SchoolRoundedIcon /> : item.id === 'teacher' ? <MenuBookRoundedIcon /> : item.id === 'organizer' ? <EventAvailableRoundedIcon /> : <AccountBalanceRoundedIcon />}
-              </ListItemIcon>
-              <ListItemText
-                primary={item.label}
-                primaryTypographyProps={{ fontWeight: active ? 700 : 600, fontSize: 14 }}
-              />
-            </ListItemButton>
+              </Box>
+              <Typography>{item.label}</Typography>
+            </Button>
           );
         })}
+      </Box>
+
+      <List disablePadding className="sidebar-page-links">
+        <ListItemButton component={NavLink} to={`/${role}`} onClick={onNavigate} className={`role-link${isActive(`/${role}`) ? ' role-link-active' : ''}`} aria-current={isActive(`/${role}`) ? 'page' : undefined}>
+          <ListItemIcon className="role-icon"><SpaceDashboardRoundedIcon /></ListItemIcon>
+          <ListItemText primary="Обзор" />
+        </ListItemButton>
         {role === 'student' && (
           <ListItemButton
             component={NavLink}
             to="/student/tasks"
             onClick={onNavigate}
-            className={`role-link${location.pathname === '/student/tasks' ? ' role-link-active' : ''}`}
+            className={`role-link${isActive('/student/tasks') ? ' role-link-active' : ''}`}
             aria-label="Задания"
-            aria-current={location.pathname === '/student/tasks' ? 'page' : undefined}
+            aria-current={isActive('/student/tasks') ? 'page' : undefined}
           >
             <ListItemIcon className="role-icon"><AssignmentRoundedIcon /></ListItemIcon>
             <ListItemText primary="Задания" primaryTypographyProps={{ fontWeight: location.pathname === '/student/tasks' ? 700 : 600, fontSize: 14 }} />
@@ -104,9 +106,9 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
             component={NavLink}
             to="/student/profile"
             onClick={onNavigate}
-            className={`role-link${location.pathname === '/student/profile' ? ' role-link-active' : ''}`}
+            className={`role-link${isActive('/student/profile') ? ' role-link-active' : ''}`}
             aria-label="Профиль"
-            aria-current={location.pathname === '/student/profile' ? 'page' : undefined}
+            aria-current={isActive('/student/profile') ? 'page' : undefined}
           >
             <ListItemIcon className="role-icon"><PersonRoundedIcon /></ListItemIcon>
             <ListItemText primary="Профиль" primaryTypographyProps={{ fontWeight: location.pathname === '/student/profile' ? 700 : 600, fontSize: 14 }} />
@@ -117,9 +119,9 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
             component={NavLink}
             to="/teacher/students"
             onClick={onNavigate}
-            className={`role-link${location.pathname === '/teacher/students' ? ' role-link-active' : ''}`}
+            className={`role-link${isActive('/teacher/students') ? ' role-link-active' : ''}`}
             aria-label="Мои студенты"
-            aria-current={location.pathname === '/teacher/students' ? 'page' : undefined}
+            aria-current={isActive('/teacher/students') ? 'page' : undefined}
           >
             <ListItemIcon className="role-icon"><GroupsRoundedIcon /></ListItemIcon>
             <ListItemText primary="Мои студенты" primaryTypographyProps={{ fontWeight: location.pathname === '/teacher/students' ? 700 : 600, fontSize: 14 }} />
@@ -130,9 +132,9 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
             component={NavLink}
             to="/teacher/submissions"
             onClick={onNavigate}
-            className={`role-link${location.pathname === '/teacher/submissions' ? ' role-link-active' : ''}`}
+            className={`role-link${isActive('/teacher/submissions') ? ' role-link-active' : ''}`}
             aria-label="Сдачи студентов"
-            aria-current={location.pathname === '/teacher/submissions' ? 'page' : undefined}
+            aria-current={isActive('/teacher/submissions') ? 'page' : undefined}
           >
             <ListItemIcon className="role-icon"><FactCheckRoundedIcon /></ListItemIcon>
             <ListItemText primary="Сдачи студентов" primaryTypographyProps={{ fontWeight: location.pathname === '/teacher/submissions' ? 700 : 600, fontSize: 14 }} />
@@ -153,11 +155,11 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
         )}
         {role === 'academic-office' && (
           <>
-            <ListItemButton component={NavLink} to="/academic-office/certificates" onClick={onNavigate} className={`role-link${location.pathname === '/academic-office/certificates' ? ' role-link-active' : ''}`} aria-label="Обработка заявок на справки" aria-current={location.pathname === '/academic-office/certificates' ? 'page' : undefined}>
+            <ListItemButton component={NavLink} to="/academic-office/certificates" onClick={onNavigate} className={`role-link${isActive('/academic-office/certificates') ? ' role-link-active' : ''}`} aria-label="Обработка заявок на справки" aria-current={isActive('/academic-office/certificates') ? 'page' : undefined}>
               <ListItemIcon className="role-icon"><FactCheckRoundedIcon /></ListItemIcon>
               <ListItemText primary="Заявки на справки" primaryTypographyProps={{ fontWeight: location.pathname === '/academic-office/certificates' ? 700 : 600, fontSize: 14 }} />
             </ListItemButton>
-            <ListItemButton component={NavLink} to="/academic-office/schedule" onClick={onNavigate} className={`role-link${location.pathname === '/academic-office/schedule' ? ' role-link-active' : ''}`} aria-label="Расписание занятий" aria-current={location.pathname === '/academic-office/schedule' ? 'page' : undefined}>
+            <ListItemButton component={NavLink} to="/academic-office/schedule" onClick={onNavigate} className={`role-link${isActive('/academic-office/schedule') ? ' role-link-active' : ''}`} aria-label="Расписание занятий" aria-current={isActive('/academic-office/schedule') ? 'page' : undefined}>
               <ListItemIcon className="role-icon"><CalendarMonthRoundedIcon /></ListItemIcon>
               <ListItemText primary="Расписание" primaryTypographyProps={{ fontWeight: location.pathname === '/academic-office/schedule' ? 700 : 600, fontSize: 14 }} />
             </ListItemButton>
@@ -165,44 +167,49 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
         )}
         {role === 'student' && (
           <>
-            <ListItemButton component={NavLink} to="/student/events" onClick={onNavigate} className={`role-link${location.pathname === '/student/events' ? ' role-link-active' : ''}`} aria-label="Мероприятия" aria-current={location.pathname === '/student/events' ? 'page' : undefined}>
+            <ListItemButton component={NavLink} to="/student/events" onClick={onNavigate} className={`role-link${isActive('/student/events') ? ' role-link-active' : ''}`} aria-label="Мероприятия" aria-current={isActive('/student/events') ? 'page' : undefined}>
               <ListItemIcon className="role-icon"><EventAvailableRoundedIcon /></ListItemIcon>
               <ListItemText primary="Мероприятия" primaryTypographyProps={{ fontWeight: location.pathname === '/student/events' ? 700 : 600, fontSize: 14 }} />
             </ListItemButton>
-            {isGroupLeader && <ListItemButton component={NavLink} to="/student/group-confirmation" onClick={onNavigate} className={`role-link${location.pathname === '/student/group-confirmation' ? ' role-link-active' : ''}`} aria-label="Заявки студентов группы" aria-current={location.pathname === '/student/group-confirmation' ? 'page' : undefined}>
+            {isGroupLeader && <ListItemButton component={NavLink} to="/student/group-confirmation" onClick={onNavigate} className={`role-link${isActive('/student/group-confirmation') ? ' role-link-active' : ''}`} aria-label="Заявки студентов группы" aria-current={isActive('/student/group-confirmation') ? 'page' : undefined}>
               <ListItemIcon className="role-icon"><GroupsRoundedIcon /></ListItemIcon>
               <ListItemText primary="Заявки группы" primaryTypographyProps={{ fontWeight: location.pathname === '/student/group-confirmation' ? 700 : 600, fontSize: 14 }} />
             </ListItemButton>}
-            <ListItemButton component={NavLink} to="/student/wallet" onClick={onNavigate} className={`role-link${location.pathname === '/student/wallet' ? ' role-link-active' : ''}`} aria-label="Кошелёк" aria-current={location.pathname === '/student/wallet' ? 'page' : undefined}>
+            <ListItemButton component={NavLink} to="/student/wallet" onClick={onNavigate} className={`role-link${isActive('/student/wallet') ? ' role-link-active' : ''}`} aria-label="Кошелёк" aria-current={isActive('/student/wallet') ? 'page' : undefined}>
               <ListItemIcon className="role-icon"><AccountBalanceWalletRoundedIcon /></ListItemIcon>
               <ListItemText primary="Кошелёк" primaryTypographyProps={{ fontWeight: location.pathname === '/student/wallet' ? 700 : 600, fontSize: 14 }} />
             </ListItemButton>
-            <ListItemButton component={NavLink} to="/student/battle-pass" onClick={onNavigate} className={`role-link${location.pathname === '/student/battle-pass' ? ' role-link-active' : ''}`} aria-label="Батл-пасс" aria-current={location.pathname === '/student/battle-pass' ? 'page' : undefined}>
+            <ListItemButton component={NavLink} to="/student/battle-pass" onClick={onNavigate} className={`role-link${isActive('/student/battle-pass') ? ' role-link-active' : ''}`} aria-label="Батл-пасс" aria-current={isActive('/student/battle-pass') ? 'page' : undefined}>
               <ListItemIcon className="role-icon"><SportsEsportsRoundedIcon /></ListItemIcon>
               <ListItemText primary="Батл-пасс" primaryTypographyProps={{ fontWeight: location.pathname === '/student/battle-pass' ? 700 : 600, fontSize: 14 }} />
             </ListItemButton>
-            <ListItemButton component={NavLink} to="/student/inventory" onClick={onNavigate} className={`role-link${location.pathname === '/student/inventory' ? ' role-link-active' : ''}`} aria-label="Инвентарь" aria-current={location.pathname === '/student/inventory' ? 'page' : undefined}>
+            <ListItemButton component={NavLink} to="/student/inventory" onClick={onNavigate} className={`role-link${isActive('/student/inventory') ? ' role-link-active' : ''}`} aria-label="Инвентарь" aria-current={isActive('/student/inventory') ? 'page' : undefined}>
               <ListItemIcon className="role-icon"><WorkspacePremiumRoundedIcon /></ListItemIcon>
               <ListItemText primary="Инвентарь" primaryTypographyProps={{ fontWeight: location.pathname === '/student/inventory' ? 700 : 600, fontSize: 14 }} />
             </ListItemButton>
-            <ListItemButton component={NavLink} to="/student/certificates" onClick={onNavigate} className={`role-link${location.pathname === '/student/certificates' ? ' role-link-active' : ''}`} aria-label="Справки" aria-current={location.pathname === '/student/certificates' ? 'page' : undefined}>
+            <ListItemButton component={NavLink} to="/student/certificates" onClick={onNavigate} className={`role-link${isActive('/student/certificates') ? ' role-link-active' : ''}`} aria-label="Справки" aria-current={isActive('/student/certificates') ? 'page' : undefined}>
               <ListItemIcon className="role-icon"><WorkspacePremiumRoundedIcon /></ListItemIcon>
               <ListItemText primary="Справки" primaryTypographyProps={{ fontWeight: location.pathname === '/student/certificates' ? 700 : 600, fontSize: 14 }} />
             </ListItemButton>
           </>
         )}
+        {[
+          { path: '/student/awards', label: 'Лента наград', icon: <EmojiEventsRoundedIcon /> },
+          { path: '/student/leaderboard', label: 'Таблица лидеров', icon: <LeaderboardRoundedIcon /> },
+        ].map((item) => (
+          <ListItemButton
+            key={item.path}
+            component={NavLink}
+            to={item.path}
+            onClick={onNavigate}
+            className={`role-link${isActive(item.path) ? ' role-link-active' : ''}`}
+            aria-current={isActive(item.path) ? 'page' : undefined}
+          >
+            <ListItemIcon className="role-icon">{item.icon}</ListItemIcon>
+            <ListItemText primary={item.label} primaryTypographyProps={{ fontWeight: isActive(item.path) ? 700 : 600, fontSize: 14 }} />
+          </ListItemButton>
+        ))}
       </List>
-
-      <Box className="sidebar-bottom">
-        <Divider />
-        <Box className="sidebar-profile">
-          <Avatar className="profile-avatar">{initials}</Avatar>
-          <Box sx={{ minWidth: 0 }}>
-            <Typography fontSize={13} fontWeight={700} noWrap>{profile.profileName}</Typography>
-            <Typography variant="caption" color="text.secondary" noWrap>{profile.profileCaption}</Typography>
-          </Box>
-        </Box>
-      </Box>
     </Box>
   );
 }
@@ -214,6 +221,8 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
   const profile = dashboards[role];
   const pageTitles: Record<string, string> = {
     '/student/profile': 'Профиль',
+    '/student/awards': 'Лента наград',
+    '/student/leaderboard': 'Таблица лидеров',
     '/student/tasks': 'Задания',
     '/student/events': 'Мероприятия',
     '/student/group-confirmation': 'Заявки студентов группы',
@@ -228,7 +237,8 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
     '/academic-office/certificates': 'Заявления на справки',
     '/academic-office/schedule': 'Расписание занятий',
   };
-  const pageTitle = pageTitles[location.pathname] ?? profile.title;
+  const pageTitle = pageTitles[location.pathname]
+    ?? (location.pathname.startsWith('/student/people/') ? 'Профиль студента' : profile.title);
   const profileInitials = profile.profileName
     .split(' ')
     .slice(0, 2)
@@ -236,6 +246,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
     .join('');
   const closeMobile = () => setMobileOpen(false);
   const { mode, toggleMode } = useColorMode();
+  const { walletBalance } = useCampusWorkflow();
   const ModeIcon = mode === 'dark' ? LightModeRoundedIcon : DarkModeRoundedIcon;
   const modeLabel = mode === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему';
 
@@ -270,9 +281,21 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
             >
               <MenuRoundedIcon />
             </IconButton>
-            <Typography fontSize={14} fontWeight={650} color="text.secondary" sx={{ flexGrow: 1 }}>
+            <Typography className="topbar-page-title" fontSize={14} fontWeight={650} color="text.secondary" sx={{ flexGrow: 1 }}>
               {pageTitle}
             </Typography>
+            {role === 'student' && (
+              <Button
+                component={NavLink}
+                to="/student/wallet"
+                className="topbar-balance"
+                startIcon={<AccountBalanceWalletRoundedIcon />}
+                aria-label={`Баланс: ${walletBalance.toLocaleString('ru-RU')} жетонов. Открыть кошелёк`}
+              >
+                <span>{walletBalance.toLocaleString('ru-RU')}</span>
+                <span className="topbar-balance-unit">жетонов</span>
+              </Button>
+            )}
             <Tooltip title={modeLabel}>
               <IconButton
                 aria-label={modeLabel}
@@ -289,7 +312,23 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
                 </Badge>
               </IconButton>
             </Tooltip>
-            <Avatar className="topbar-avatar">{profileInitials}</Avatar>
+            {role === 'student' ? (
+              <Button component={NavLink} to="/student/profile" className="topbar-user" aria-label={`Профиль: ${profile.profileName}`}>
+                <Avatar className="topbar-avatar">{profileInitials}</Avatar>
+                <Box className="topbar-user-copy">
+                  <Typography variant="body2" fontWeight={700} noWrap>{profile.profileName}</Typography>
+                  <Typography variant="caption" color="text.secondary" noWrap>{profile.profileCaption}</Typography>
+                </Box>
+              </Button>
+            ) : (
+              <Box className="topbar-user topbar-user-static" aria-label={profile.profileName}>
+                <Avatar className="topbar-avatar">{profileInitials}</Avatar>
+                <Box className="topbar-user-copy">
+                  <Typography variant="body2" fontWeight={700} noWrap>{profile.profileName}</Typography>
+                  <Typography variant="caption" color="text.secondary" noWrap>{profile.profileCaption}</Typography>
+                </Box>
+              </Box>
+            )}
           </Toolbar>
         </AppBar>
         <Box component="main" className="page-content">

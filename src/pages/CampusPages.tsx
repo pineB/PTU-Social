@@ -816,7 +816,6 @@ export function WalletPage() {
   return (
     <Box className="campus-page">
       <PageHeader title="Кошелёк">
-        <Typography color="text.secondary">Баланс и история операций</Typography>
       </PageHeader>
       <Card className="wallet-balance-card">
         <CardContent>
@@ -916,7 +915,6 @@ export function BattlePassPage() {
   return (
     <Box className="campus-page">
       <PageHeader title="Батл-пасс">
-        <Typography color="text.secondary">Сезон на 6 месяцев · 50 уровней</Typography>
       </PageHeader>
       <Card className="battle-pass-hero">
         <CardContent>
@@ -936,7 +934,6 @@ export function BattlePassPage() {
       {error && <Alert severity="error">{error}</Alert>}
       <SectionCard title="Уровни сезона" icon={<CardGiftcardRoundedIcon />}>
         <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'center' }} justifyContent="space-between" gap={1.5} mb={2}>
-          <Typography variant="body2" color="text.secondary">На каждом уровне отображены обе дорожки. Пустые уровни сохранены.</Typography>
           {premiumPassOwned ? <Chip size="small" color="success" label="Премиальный пропуск активен" /> : (
             <Button variant="contained" disabled={busyAction !== null || walletBalance < premiumPassPrice} onClick={() => void handlePurchase()}>
               {busyAction === 'purchase' ? <CircularProgress size={18} color="inherit" /> : `Купить премиум · ${premiumPassPrice} жетонов`}
@@ -1169,7 +1166,6 @@ export function CertificateManagementPage() {
   return (
     <Box className="campus-page">
       <PageHeader title="Заявления на справки">
-        <Typography color="text.secondary">Обработка заявок студентов учебной частью</Typography>
       </PageHeader>
       <Box className="office-metrics">
         <Card><CardContent><Typography variant="caption" color="text.secondary">Новые</Typography><Typography variant="h4" fontWeight={750}>{certificateRequests.filter((item) => item.status === 'Подана').length}</Typography></CardContent></Card>
@@ -1227,7 +1223,6 @@ export function ScheduleManagementPage() {
   return (
     <Box className="campus-page">
       <PageHeader title="Расписание занятий">
-        <Typography color="text.secondary">Составление недельного расписания учебных групп</Typography>
       </PageHeader>
       <SectionCard title="Добавить занятие" icon={<CalendarMonthRoundedIcon />}>
         <Box component="form" onSubmit={handleCreate} className="schedule-entry-form">

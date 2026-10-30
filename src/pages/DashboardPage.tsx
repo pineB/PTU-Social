@@ -42,9 +42,8 @@ const focusCards = {
   },
   organizer: {
     label: 'МЕРОПРИЯТИЯ',
-    title: 'Управление',
-    description: 'Создавайте события и подтверждайте участие',
-    footnote: 'Созданные события и отзывы',
+    title: '3 мероприятия',
+    footnote: '87 участников',
   },
   'academic-office': {
     label: 'СПРАВКИ',
@@ -157,7 +156,6 @@ export default function DashboardPage({ data, focusOverride }: { data: Dashboard
 
         <Card className="focus-card">
           <CardContent className="focus-card-content">
-            <Box className="focus-card-orbit" aria-hidden="true" />
             <Typography className="focus-label">{focus.label}</Typography>
             <Typography variant="h5" className="focus-title">{focus.title}</Typography>
             {'description' in focus && (
@@ -171,9 +169,6 @@ export default function DashboardPage({ data, focusOverride }: { data: Dashboard
               </Box>
             )}
             {'footnote' in focus && <Typography className="focus-footnote">{focus.footnote}</Typography>}
-            <Box className="focus-decoration" aria-hidden="true">
-              <Box /><Box /><Box /><Box /><Box /><Box />
-            </Box>
           </CardContent>
         </Card>
       </Box>
