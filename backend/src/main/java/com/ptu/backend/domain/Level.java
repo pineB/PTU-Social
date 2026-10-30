@@ -32,6 +32,9 @@ public class Level {
     @Column(name = "reward_currency", nullable = false)
     private Integer rewardCurrency;
 
+    @Column(name = "reward_case_id")
+    private Long rewardCaseId;
+
     @Column(name = "reward_name", length = 120)
     private String rewardName;
 }

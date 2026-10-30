@@ -30,6 +30,9 @@ public class BattlePassSeason {
     @Column(name = "total_action_points", nullable = false)
     private Integer totalActionPoints = 0;
 
+    @Column(name = "premium_track_purchased", nullable = false)
+    private Boolean premiumTrackPurchased = false;
+
     @Column(name = "starts_at", nullable = false)
     private LocalDateTime startsAt;
 
