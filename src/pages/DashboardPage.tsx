@@ -19,10 +19,12 @@ import {
 } from '@mui/material';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
+import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded';
 import { dashboards, type DashboardData } from '../data/dashboards';
 import { useLocation } from 'react-router-dom';
 import { ActivationResultNotice, RegistrationResultNotice } from './AccountPages';
 import { Link } from 'react-router-dom';
+import { useCampusWorkflow } from '../data/campus-workflow';
 
 const focusCards = {
   student: {
@@ -38,15 +40,21 @@ const focusCards = {
     description: 'Первое занятие · 09:00',
     footnote: '12 работ на проверку',
   },
+  organizer: {
+    label: 'МЕРОПРИЯТИЯ',
+    title: 'Управление',
+    description: 'Создавайте события и подтверждайте участие',
+    footnote: 'Созданные события и отзывы',
+  },
   'academic-office': {
     label: 'СПРАВКИ',
     title: '18 заявлений',
   },
 } as const;
 
-export default function DashboardPage({ data }: { data: DashboardData }) {
+export default function DashboardPage({ data, focusOverride }: { data: DashboardData; focusOverride?: { label: string; title: string; description?: string; footnote?: string; progress?: number } }) {
   const [search, setSearch] = useState('');
-  const focus = focusCards[data.role];
+  const focus = focusOverride ?? focusCards[data.role];
   const filteredRows = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('ru');
     if (!query) return data.rows;
@@ -61,9 +69,13 @@ export default function DashboardPage({ data }: { data: DashboardData }) {
         <Box className="welcome-copy">
           <Typography variant="h4" className="welcome-title">{data.heading}</Typography>
         </Box>
-        <Button component={Link} to={data.role === 'student' ? '/student/tasks' : data.role === 'teacher' ? '/teacher/submissions' : '#dashboard-table'} variant="contained" endIcon={<ArrowForwardRoundedIcon />} className="primary-action">
-          {data.role === 'student' ? 'Все задания' : data.role === 'teacher' ? 'Расписание' : 'Заявления'}
-        </Button>
+        <Stack direction="row" gap={1} flexWrap="wrap">
+          {data.role === 'academic-office' && <Button component={Link} to="/academic-office/schedule" variant="outlined">Расписание</Button>}
+          {data.role === 'teacher' && <Button component={Link} to="/teacher/students" variant="outlined" startIcon={<GroupsRoundedIcon />}>Мои студенты</Button>}
+          <Button component={Link} to={data.role === 'student' ? '/student/tasks' : data.role === 'teacher' ? '/teacher/submissions' : data.role === 'organizer' ? '/organizer/events' : '/academic-office/certificates'} variant="contained" endIcon={<ArrowForwardRoundedIcon />} className="primary-action">
+            {data.role === 'student' ? 'Все задания' : data.role === 'teacher' ? 'Проверить работы' : data.role === 'organizer' ? 'Мои мероприятия' : 'Обработать справки'}
+          </Button>
+        </Stack>
       </Box>
 
       <Box className="metrics-grid">
@@ -171,11 +183,32 @@ export default function DashboardPage({ data }: { data: DashboardData }) {
 
 export function StudentDashboard() {
   const location = useLocation();
+  const { academicRating, boaPoints, buaPoints, passExperience } = useCampusWorkflow();
   const routeState = location.state as { registrationSubmitted?: boolean } | null;
+  const level = Math.min(50, Math.floor(passExperience / 20));
+  const remaining = level >= 50 ? 0 : 20 - passExperience % 20;
+  const data = {
+    ...dashboards.student,
+    metrics: dashboards.student.metrics.map((metric) => ({
+      ...metric,
+      value: metric.label === 'Академический рейтинг' ? String(academicRating)
+        : metric.label === 'Учебная активность' ? String(buaPoints)
+          : metric.label === 'Общественная активность' ? String(boaPoints)
+            : metric.label === 'Батл-пасс' ? `${level} ур.`
+              : metric.value,
+    })),
+  };
+  const focus = {
+    ...focusCards.student,
+    title: `Уровень ${level}`,
+    description: level >= 50 ? 'Максимальный уровень сезона' : `Ещё ${remaining} АР до следующего уровня`,
+    footnote: `${academicRating} АР · ${level} из 50 уровней`,
+    progress: (level / 50) * 100,
+  };
   return (
     <>
       <RegistrationResultNotice submitted={routeState?.registrationSubmitted === true} />
-      <DashboardPage data={dashboards.student} />
+      <DashboardPage data={data} focusOverride={focus} />
     </>
   );
 }
@@ -189,6 +222,10 @@ export function TeacherDashboard() {
       <DashboardPage data={dashboards.teacher} />
     </>
   );
+}
+
+export function OrganizerDashboard() {
+  return <DashboardPage data={dashboards.organizer} />;
 }
 
 export function AcademicOfficeDashboard() {

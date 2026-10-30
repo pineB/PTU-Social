@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { useCampusWorkflow } from './campus-workflow';
 
 export type AssignmentStatus = 'in_progress' | 'submitted' | 'overdue' | 'accepted';
 export type ReviewStatus = 'in_progress' | 'submitted' | 'accepted';
@@ -170,6 +171,7 @@ export function calculateAward(assignment: Assignment, submission: StudentSubmis
 }
 
 export function TaskWorkflowProvider({ children }: { children: ReactNode }) {
+  const { awardAcademicRating } = useCampusWorkflow();
   const [assignments, setAssignments] = useState(initialAssignments);
   const [submissions, setSubmissions] = useState(initialSubmissions);
 
@@ -212,6 +214,7 @@ export function TaskWorkflowProvider({ children }: { children: ReactNode }) {
     const assignment = assignments.find((item) => item.id === submission.assignmentId);
     if (!assignment) throw new Error('Задание для этой работы не найдено.');
     const awardedPoints = calculateAward(assignment, submission, grade);
+    if (submission.studentName === 'Александра Ким') awardAcademicRating(awardedPoints);
     setSubmissions((current) => current.map((item) =>
       item.id === submissionId ? { ...item, status: 'accepted', grade, awardedPoints, teacherComment: comment, feedbackFileName } : item,
     ));
@@ -220,7 +223,7 @@ export function TaskWorkflowProvider({ children }: { children: ReactNode }) {
         item.id === submission.assignmentId ? { ...item, status: 'accepted', grade, awardedPoints, teacherComment: comment, feedbackFileName } : item,
       ));
     }
-  }, [assignments, submissions]);
+  }, [assignments, submissions, awardAcademicRating]);
 
   const returnSubmission = useCallback(async (submissionId: string, comment: string, feedbackFileName?: string) => {
     await mockRequest();

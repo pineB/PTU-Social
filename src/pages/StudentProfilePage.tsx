@@ -13,6 +13,7 @@ import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded';
 import AssignmentTurnedInRoundedIcon from '@mui/icons-material/AssignmentTurnedInRounded';
 import type { SvgIconComponent } from '@mui/icons-material';
 import { dashboards } from '../data/dashboards';
+import { useCampusWorkflow } from '../data/campus-workflow';
 
 interface ProfileMetric {
   label: string;
@@ -20,12 +21,6 @@ interface ProfileMetric {
   description: string;
   icon: SvgIconComponent;
 }
-
-const profileMetrics: ProfileMetric[] = [
-  { label: 'Академический рейтинг', value: '689', description: 'за текущий семестр', icon: AutoStoriesRoundedIcon },
-  { label: 'БОА', value: '285', description: 'общественная активность', icon: GroupsRoundedIcon },
-  { label: 'БУА', value: '340', description: 'учебная активность', icon: AssignmentTurnedInRoundedIcon },
-];
 
 const history = [
   { title: 'Практическая работа № 3', detail: 'Базы данных · оценка 5', date: 'Сегодня', points: '+90 АР', type: 'academic' },
@@ -36,7 +31,21 @@ const history = [
 
 export default function StudentProfilePage() {
   const student = dashboards.student;
+  const { academicRating, boaPoints, buaPoints, activityAwards } = useCampusWorkflow();
   const initials = student.profileName.split(' ').slice(0, 2).map((part) => part[0]).join('');
+  const profileMetrics: ProfileMetric[] = [
+    { label: 'Академический рейтинг', value: String(academicRating), description: 'за текущий семестр', icon: AutoStoriesRoundedIcon },
+    { label: 'БОА', value: String(boaPoints), description: 'общественная активность', icon: GroupsRoundedIcon },
+    { label: 'БУА', value: String(buaPoints), description: 'учебная активность', icon: AssignmentTurnedInRoundedIcon },
+  ];
+  const recentAwards = activityAwards.map((award) => ({
+    title: award.eventTitle,
+    detail: `Участие подтверждено · ${award.group}`,
+    date: new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(new Date(award.createdAt)),
+    points: `+${award.points} ${award.activityType}`,
+    type: award.activityType === 'БОА' ? 'social' : 'academic',
+  }));
+  const profileHistory = [...recentAwards, ...history];
 
   return (
     <Box className="student-profile-page">
@@ -76,7 +85,7 @@ export default function StudentProfilePage() {
             <Typography variant="h6">История активности</Typography>
           </Stack>
           <Box className="profile-history-list">
-            {history.map((item) => (
+            {profileHistory.map((item) => (
               <Box className="profile-history-row" key={`${item.title}-${item.date}`}>
                 <Avatar className={`history-icon history-icon-${item.type}`}>
                   {item.type === 'academic' ? <AutoStoriesRoundedIcon /> : <GroupsRoundedIcon />}

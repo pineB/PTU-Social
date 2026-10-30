@@ -26,8 +26,15 @@ import AccountBalanceRoundedIcon from '@mui/icons-material/AccountBalanceRounded
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
 import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
 import FactCheckRoundedIcon from '@mui/icons-material/FactCheckRounded';
+import EventAvailableRoundedIcon from '@mui/icons-material/EventAvailableRounded';
+import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded';
+import AccountBalanceWalletRoundedIcon from '@mui/icons-material/AccountBalanceWalletRounded';
+import SportsEsportsRoundedIcon from '@mui/icons-material/SportsEsportsRounded';
+import WorkspacePremiumRoundedIcon from '@mui/icons-material/WorkspacePremiumRounded';
+import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { dashboards, type RoleId } from '../data/dashboards';
+import { useCampusWorkflow } from '../data/campus-workflow';
 import { useColorMode } from '../theme/ColorModeProvider';
 
 const drawerWidth = 256;
@@ -35,11 +42,13 @@ const drawerWidth = 256;
 const navigation: { id: RoleId; label: string }[] = [
   { id: 'student', label: 'Студент' },
   { id: 'teacher', label: 'Преподаватель' },
+  { id: 'organizer', label: 'Организатор' },
   { id: 'academic-office', label: 'Учебная часть' },
 ];
 
 function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () => void }) {
   const location = useLocation();
+  const { isGroupLeader } = useCampusWorkflow();
   const profile = dashboards[role];
   const initials = profile.profileName
     .split(' ')
@@ -68,7 +77,7 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
               aria-current={active ? 'page' : undefined}
             >
               <ListItemIcon className="role-icon">
-                {item.id === 'student' ? <SchoolRoundedIcon /> : item.id === 'teacher' ? <MenuBookRoundedIcon /> : <AccountBalanceRoundedIcon />}
+                {item.id === 'student' ? <SchoolRoundedIcon /> : item.id === 'teacher' ? <MenuBookRoundedIcon /> : item.id === 'organizer' ? <EventAvailableRoundedIcon /> : <AccountBalanceRoundedIcon />}
               </ListItemIcon>
               <ListItemText
                 primary={item.label}
@@ -106,6 +115,19 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
         {role === 'teacher' && (
           <ListItemButton
             component={NavLink}
+            to="/teacher/students"
+            onClick={onNavigate}
+            className={`role-link${location.pathname === '/teacher/students' ? ' role-link-active' : ''}`}
+            aria-label="Мои студенты"
+            aria-current={location.pathname === '/teacher/students' ? 'page' : undefined}
+          >
+            <ListItemIcon className="role-icon"><GroupsRoundedIcon /></ListItemIcon>
+            <ListItemText primary="Мои студенты" primaryTypographyProps={{ fontWeight: location.pathname === '/teacher/students' ? 700 : 600, fontSize: 14 }} />
+          </ListItemButton>
+        )}
+        {role === 'teacher' && (
+          <ListItemButton
+            component={NavLink}
             to="/teacher/submissions"
             onClick={onNavigate}
             className={`role-link${location.pathname === '/teacher/submissions' ? ' role-link-active' : ''}`}
@@ -115,6 +137,59 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
             <ListItemIcon className="role-icon"><FactCheckRoundedIcon /></ListItemIcon>
             <ListItemText primary="Сдачи студентов" primaryTypographyProps={{ fontWeight: location.pathname === '/teacher/submissions' ? 700 : 600, fontSize: 14 }} />
           </ListItemButton>
+        )}
+        {(role === 'teacher' || role === 'organizer') && (
+          <ListItemButton
+            component={NavLink}
+            to={role === 'teacher' ? '/teacher/events' : '/organizer/events'}
+            onClick={onNavigate}
+            className={`role-link${location.pathname.endsWith('/events') ? ' role-link-active' : ''}`}
+            aria-label="Мероприятия и начисления"
+            aria-current={location.pathname.endsWith('/events') ? 'page' : undefined}
+          >
+            <ListItemIcon className="role-icon"><EventAvailableRoundedIcon /></ListItemIcon>
+            <ListItemText primary="Мероприятия" primaryTypographyProps={{ fontWeight: location.pathname.endsWith('/events') ? 700 : 600, fontSize: 14 }} />
+          </ListItemButton>
+        )}
+        {role === 'academic-office' && (
+          <>
+            <ListItemButton component={NavLink} to="/academic-office/certificates" onClick={onNavigate} className={`role-link${location.pathname === '/academic-office/certificates' ? ' role-link-active' : ''}`} aria-label="Обработка заявок на справки" aria-current={location.pathname === '/academic-office/certificates' ? 'page' : undefined}>
+              <ListItemIcon className="role-icon"><FactCheckRoundedIcon /></ListItemIcon>
+              <ListItemText primary="Заявки на справки" primaryTypographyProps={{ fontWeight: location.pathname === '/academic-office/certificates' ? 700 : 600, fontSize: 14 }} />
+            </ListItemButton>
+            <ListItemButton component={NavLink} to="/academic-office/schedule" onClick={onNavigate} className={`role-link${location.pathname === '/academic-office/schedule' ? ' role-link-active' : ''}`} aria-label="Расписание занятий" aria-current={location.pathname === '/academic-office/schedule' ? 'page' : undefined}>
+              <ListItemIcon className="role-icon"><CalendarMonthRoundedIcon /></ListItemIcon>
+              <ListItemText primary="Расписание" primaryTypographyProps={{ fontWeight: location.pathname === '/academic-office/schedule' ? 700 : 600, fontSize: 14 }} />
+            </ListItemButton>
+          </>
+        )}
+        {role === 'student' && (
+          <>
+            <ListItemButton component={NavLink} to="/student/events" onClick={onNavigate} className={`role-link${location.pathname === '/student/events' ? ' role-link-active' : ''}`} aria-label="Мероприятия" aria-current={location.pathname === '/student/events' ? 'page' : undefined}>
+              <ListItemIcon className="role-icon"><EventAvailableRoundedIcon /></ListItemIcon>
+              <ListItemText primary="Мероприятия" primaryTypographyProps={{ fontWeight: location.pathname === '/student/events' ? 700 : 600, fontSize: 14 }} />
+            </ListItemButton>
+            {isGroupLeader && <ListItemButton component={NavLink} to="/student/group-confirmation" onClick={onNavigate} className={`role-link${location.pathname === '/student/group-confirmation' ? ' role-link-active' : ''}`} aria-label="Заявки студентов группы" aria-current={location.pathname === '/student/group-confirmation' ? 'page' : undefined}>
+              <ListItemIcon className="role-icon"><GroupsRoundedIcon /></ListItemIcon>
+              <ListItemText primary="Заявки группы" primaryTypographyProps={{ fontWeight: location.pathname === '/student/group-confirmation' ? 700 : 600, fontSize: 14 }} />
+            </ListItemButton>}
+            <ListItemButton component={NavLink} to="/student/wallet" onClick={onNavigate} className={`role-link${location.pathname === '/student/wallet' ? ' role-link-active' : ''}`} aria-label="Кошелёк" aria-current={location.pathname === '/student/wallet' ? 'page' : undefined}>
+              <ListItemIcon className="role-icon"><AccountBalanceWalletRoundedIcon /></ListItemIcon>
+              <ListItemText primary="Кошелёк" primaryTypographyProps={{ fontWeight: location.pathname === '/student/wallet' ? 700 : 600, fontSize: 14 }} />
+            </ListItemButton>
+            <ListItemButton component={NavLink} to="/student/battle-pass" onClick={onNavigate} className={`role-link${location.pathname === '/student/battle-pass' ? ' role-link-active' : ''}`} aria-label="Батл-пасс" aria-current={location.pathname === '/student/battle-pass' ? 'page' : undefined}>
+              <ListItemIcon className="role-icon"><SportsEsportsRoundedIcon /></ListItemIcon>
+              <ListItemText primary="Батл-пасс" primaryTypographyProps={{ fontWeight: location.pathname === '/student/battle-pass' ? 700 : 600, fontSize: 14 }} />
+            </ListItemButton>
+            <ListItemButton component={NavLink} to="/student/inventory" onClick={onNavigate} className={`role-link${location.pathname === '/student/inventory' ? ' role-link-active' : ''}`} aria-label="Инвентарь" aria-current={location.pathname === '/student/inventory' ? 'page' : undefined}>
+              <ListItemIcon className="role-icon"><WorkspacePremiumRoundedIcon /></ListItemIcon>
+              <ListItemText primary="Инвентарь" primaryTypographyProps={{ fontWeight: location.pathname === '/student/inventory' ? 700 : 600, fontSize: 14 }} />
+            </ListItemButton>
+            <ListItemButton component={NavLink} to="/student/certificates" onClick={onNavigate} className={`role-link${location.pathname === '/student/certificates' ? ' role-link-active' : ''}`} aria-label="Справки" aria-current={location.pathname === '/student/certificates' ? 'page' : undefined}>
+              <ListItemIcon className="role-icon"><WorkspacePremiumRoundedIcon /></ListItemIcon>
+              <ListItemText primary="Справки" primaryTypographyProps={{ fontWeight: location.pathname === '/student/certificates' ? 700 : 600, fontSize: 14 }} />
+            </ListItemButton>
+          </>
         )}
       </List>
 
@@ -137,13 +212,23 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
   const location = useLocation();
   const role = navigation.find(({ id }) => location.pathname.startsWith(`/${id}`))?.id ?? 'student';
   const profile = dashboards[role];
-  const pageTitle = location.pathname === '/student/profile'
-    ? 'Профиль'
-    : location.pathname === '/student/tasks'
-      ? 'Задания'
-      : location.pathname === '/teacher/submissions'
-        ? 'Сдачи студентов'
-        : profile.title;
+  const pageTitles: Record<string, string> = {
+    '/student/profile': 'Профиль',
+    '/student/tasks': 'Задания',
+    '/student/events': 'Мероприятия',
+    '/student/group-confirmation': 'Заявки студентов группы',
+    '/student/wallet': 'Кошелёк',
+    '/student/battle-pass': 'Батл-пасс',
+    '/student/inventory': 'Инвентарь',
+    '/student/certificates': 'Справки',
+    '/teacher/submissions': 'Сдачи студентов',
+    '/teacher/students': 'Мои студенты',
+    '/teacher/events': 'Мероприятия и баллы',
+    '/organizer/events': 'Мероприятия и баллы',
+    '/academic-office/certificates': 'Заявления на справки',
+    '/academic-office/schedule': 'Расписание занятий',
+  };
+  const pageTitle = pageTitles[location.pathname] ?? profile.title;
   const profileInitials = profile.profileName
     .split(' ')
     .slice(0, 2)
