@@ -53,6 +53,7 @@ CREATE TABLE submissions (
     submitted_at TIMESTAMP NOT NULL,
     status VARCHAR(32) NOT NULL,
     content TEXT,
+    attachment_url VARCHAR(2048),
     teacher_feedback TEXT,
     revision_count INTEGER NOT NULL DEFAULT 0,
     version_number INTEGER NOT NULL DEFAULT 1,

@@ -9,6 +9,7 @@ import com.ptu.backend.repository.AcademicRatingHistoryRepository;
 import com.ptu.backend.repository.SubmissionRepository;
 import com.ptu.backend.repository.TaskRepository;
 import com.ptu.backend.web.dto.ReviewSubmissionRequest;
+import com.ptu.backend.web.dto.ReturnForRevisionRequest;
 import com.ptu.backend.web.dto.SubmitTaskRequest;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -52,10 +53,25 @@ public class SubmissionService {
         submission.setStudentId(studentId);
         submission.setSubmittedAt(LocalDateTime.now());
         submission.setContent(request.content());
+        submission.setAttachmentUrl(request.attachmentUrl());
         submission.setStatus(SubmissionStatus.PENDING);
         submission.setArchived(false);
         submission.setRevisionCount(previous.map(Submission::getRevisionCount).orElse(0));
         submission.setVersionNumber(previous.map(Submission::getVersionNumber).map(v -> v + 1).orElse(1));
+        return submissionRepository.save(submission);
+    }
+
+    @Transactional
+    public Submission returnForRevision(Long submissionId, ReturnForRevisionRequest request) {
+        Submission submission = submissionRepository.findById(submissionId)
+            .orElseThrow(() -> new IllegalArgumentException("Submission not found"));
+
+        submission.setStatus(SubmissionStatus.REWORK);
+        submission.setTeacherFeedback(request.comment());
+        submission.setRevisionCount(submission.getRevisionCount() + 1);
+        submission.setVersionNumber(submission.getVersionNumber() + 1);
+        submission.setArchived(false);
+
         return submissionRepository.save(submission);
     }
 

@@ -4,6 +4,7 @@ import com.ptu.backend.domain.Submission;
 import com.ptu.backend.service.SemesterArchiveService;
 import com.ptu.backend.service.SubmissionService;
 import com.ptu.backend.web.dto.ReviewSubmissionRequest;
+import com.ptu.backend.web.dto.ReturnForRevisionRequest;
 import com.ptu.backend.web.dto.SubmitTaskRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -50,6 +51,15 @@ public class SubmissionController {
         @RequestBody ReviewSubmissionRequest request
     ) {
         return ResponseEntity.ok(submissionService.reviewSubmission(submissionId, request));
+    }
+
+    @Operation(summary = "Return submission for revision with comment")
+    @PostMapping("/submissions/{submissionId}/rework")
+    public ResponseEntity<Submission> returnForRevision(
+        @PathVariable Long submissionId,
+        @RequestBody ReturnForRevisionRequest request
+    ) {
+        return ResponseEntity.ok(submissionService.returnForRevision(submissionId, request));
     }
 
     @Operation(summary = "Archive tasks and submissions for a group")

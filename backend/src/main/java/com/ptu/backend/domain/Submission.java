@@ -44,6 +44,9 @@ public class Submission {
     @Column(columnDefinition = "TEXT")
     private String content;
 
+    @Column(name = "attachment_url", length = 2048)
+    private String attachmentUrl;
+
     @Column(name = "teacher_feedback", columnDefinition = "TEXT")
     private String teacherFeedback;
 

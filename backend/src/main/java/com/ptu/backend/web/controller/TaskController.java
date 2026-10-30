@@ -44,4 +44,13 @@ public class TaskController {
     public ResponseEntity<Task> getTask(@PathVariable Long taskId) {
         return ResponseEntity.ok(taskService.getTask(taskId));
     }
+
+    @Operation(summary = "Get tasks available to a student by his group")
+    @GetMapping("/students/{studentId}/tasks")
+    public ResponseEntity<List<Task>> getTasksForStudent(
+        @PathVariable Long studentId,
+        @RequestParam Long groupId
+    ) {
+        return ResponseEntity.ok(taskService.getTasksForStudent(studentId, groupId));
+    }
 }

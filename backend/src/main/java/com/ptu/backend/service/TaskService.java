@@ -55,6 +55,14 @@ public class TaskService {
     }
 
     @Transactional(readOnly = true)
+    public List<Task> getTasksForStudent(Long studentId, Long groupId) {
+        if (groupId == null) {
+            throw new IllegalArgumentException("Group id is required to list tasks for student");
+        }
+        return taskRepository.findByGroupIdAndStatus(groupId, TaskStatus.ACTIVE);
+    }
+
+    @Transactional(readOnly = true)
     public Task getTask(Long taskId) {
         return taskRepository.findById(taskId)
             .orElseThrow(() -> new IllegalArgumentException("Task not found"));
