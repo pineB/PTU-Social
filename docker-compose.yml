@@ -53,6 +53,15 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-redis}
       MAIL_HOST: mailpit
       MAIL_PORT: 1025
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
+      REGISTRATION_TTL: ${REGISTRATION_TTL:-7d}
+      INVITE_TTL: ${INVITE_TTL:-7d}
+      SEED_OFFICE_EMAIL: ${SEED_OFFICE_EMAIL:-office@ptu.local}
+      SEED_OFFICE_PASSWORD: ${SEED_OFFICE_PASSWORD:-office12345}
+      MAIL_FROM: ${MAIL_FROM:-no-reply@ptu.local}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-0123456789abcdef0123456789abcdef}
+      JWT_TTL: ${JWT_TTL:-24h}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     depends_on:
