@@ -23,6 +23,9 @@ import LightModeRoundedIcon from '@mui/icons-material/LightModeRounded';
 import SchoolRoundedIcon from '@mui/icons-material/SchoolRounded';
 import MenuBookRoundedIcon from '@mui/icons-material/MenuBookRounded';
 import AccountBalanceRoundedIcon from '@mui/icons-material/AccountBalanceRounded';
+import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
+import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
+import FactCheckRoundedIcon from '@mui/icons-material/FactCheckRounded';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { dashboards, type RoleId } from '../data/dashboards';
 import { useColorMode } from '../theme/ColorModeProvider';
@@ -53,7 +56,7 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
 
       <List disablePadding>
         {navigation.map((item) => {
-          const active = location.pathname.startsWith(`/${item.id}`);
+          const active = location.pathname === `/${item.id}`;
           return (
             <ListItemButton
               key={item.id}
@@ -74,6 +77,45 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
             </ListItemButton>
           );
         })}
+        {role === 'student' && (
+          <ListItemButton
+            component={NavLink}
+            to="/student/tasks"
+            onClick={onNavigate}
+            className={`role-link${location.pathname === '/student/tasks' ? ' role-link-active' : ''}`}
+            aria-label="Задания"
+            aria-current={location.pathname === '/student/tasks' ? 'page' : undefined}
+          >
+            <ListItemIcon className="role-icon"><AssignmentRoundedIcon /></ListItemIcon>
+            <ListItemText primary="Задания" primaryTypographyProps={{ fontWeight: location.pathname === '/student/tasks' ? 700 : 600, fontSize: 14 }} />
+          </ListItemButton>
+        )}
+        {role === 'student' && (
+          <ListItemButton
+            component={NavLink}
+            to="/student/profile"
+            onClick={onNavigate}
+            className={`role-link${location.pathname === '/student/profile' ? ' role-link-active' : ''}`}
+            aria-label="Профиль"
+            aria-current={location.pathname === '/student/profile' ? 'page' : undefined}
+          >
+            <ListItemIcon className="role-icon"><PersonRoundedIcon /></ListItemIcon>
+            <ListItemText primary="Профиль" primaryTypographyProps={{ fontWeight: location.pathname === '/student/profile' ? 700 : 600, fontSize: 14 }} />
+          </ListItemButton>
+        )}
+        {role === 'teacher' && (
+          <ListItemButton
+            component={NavLink}
+            to="/teacher/submissions"
+            onClick={onNavigate}
+            className={`role-link${location.pathname === '/teacher/submissions' ? ' role-link-active' : ''}`}
+            aria-label="Сдачи студентов"
+            aria-current={location.pathname === '/teacher/submissions' ? 'page' : undefined}
+          >
+            <ListItemIcon className="role-icon"><FactCheckRoundedIcon /></ListItemIcon>
+            <ListItemText primary="Сдачи студентов" primaryTypographyProps={{ fontWeight: location.pathname === '/teacher/submissions' ? 700 : 600, fontSize: 14 }} />
+          </ListItemButton>
+        )}
       </List>
 
       <Box className="sidebar-bottom">
@@ -95,7 +137,13 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
   const location = useLocation();
   const role = navigation.find(({ id }) => location.pathname.startsWith(`/${id}`))?.id ?? 'student';
   const profile = dashboards[role];
-  const pageTitle = profile.title;
+  const pageTitle = location.pathname === '/student/profile'
+    ? 'Профиль'
+    : location.pathname === '/student/tasks'
+      ? 'Задания'
+      : location.pathname === '/teacher/submissions'
+        ? 'Сдачи студентов'
+        : profile.title;
   const profileInitials = profile.profileName
     .split(' ')
     .slice(0, 2)

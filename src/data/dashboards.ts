@@ -57,10 +57,10 @@ export const dashboards: Record<RoleId, DashboardData> = {
     subjectHeading: 'Задание',
     detailHeading: 'Дисциплина · преподаватель',
     rows: [
-      { subject: 'Практическая работа № 4', detail: 'Базы данных · Петров И. С.', status: 'Сдать сегодня', tone: 'warning' },
-      { subject: 'Компонентный подход в React', detail: 'Веб-разработка · Иванова М. А.', status: 'На проверке', tone: 'success' },
-      { subject: 'Прототипирование проекта', detail: 'Проектный практикум · Смирнова Е. В.', status: 'Сдать завтра', tone: 'neutral' },
-      { subject: 'Тема 6 · подготовка к занятию', detail: 'Английский язык · Кузнецова О. П.', status: 'К просмотру', tone: 'neutral' },
+      { subject: 'Практическая работа № 4', detail: 'Базы данных · Петров И. С.', status: 'В процессе', tone: 'neutral' },
+      { subject: 'Компонентный подход в React', detail: 'Веб-разработка · Иванова М. А.', status: 'Сдано', tone: 'success' },
+      { subject: 'Прототипирование проекта', detail: 'Проектный практикум · Смирнова Е. В.', status: 'Просрочено', tone: 'warning' },
+      { subject: 'Тема 6 · подготовка к занятию', detail: 'Английский язык · Кузнецова О. П.', status: 'Принято', tone: 'neutral' },
     ],
   },
   teacher: {

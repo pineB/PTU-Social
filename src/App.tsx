@@ -7,6 +7,15 @@ import {
   StudentDashboard,
   TeacherDashboard,
 } from './pages/DashboardPage';
+import {
+  StudentRegistrationPage,
+  TeacherActivationPage,
+  VerifyEmailPage,
+} from './pages/AccountPages';
+import StudentProfilePage from './pages/StudentProfilePage';
+import StudentTasksPage from './pages/StudentTasksPage';
+import TeacherSubmissionsPage from './pages/TeacherSubmissionsPage';
+import { TaskWorkflowProvider } from './data/task-workflow';
 import type { HttpErrorNotice } from './types/events';
 
 export default function App() {
@@ -19,12 +28,18 @@ export default function App() {
   }, []);
 
   return (
-    <>
+    <TaskWorkflowProvider>
       <Routes>
+        <Route path="register" element={<StudentRegistrationPage />} />
+        <Route path="verify-email" element={<VerifyEmailPage />} />
+        <Route path="teacher/activate" element={<TeacherActivationPage />} />
         <Route element={<AppLayout />}>
           <Route index element={<Navigate to="/student" replace />} />
           <Route path="student" element={<StudentDashboard />} />
+          <Route path="student/profile" element={<StudentProfilePage />} />
+          <Route path="student/tasks" element={<StudentTasksPage />} />
           <Route path="teacher" element={<TeacherDashboard />} />
+          <Route path="teacher/submissions" element={<TeacherSubmissionsPage />} />
           <Route path="academic-office" element={<AcademicOfficeDashboard />} />
           <Route path="*" element={<Navigate to="/student" replace />} />
         </Route>
@@ -41,6 +56,6 @@ export default function App() {
           </Alert>
         ) : undefined}
       </Snackbar>
-    </>
+    </TaskWorkflowProvider>
   );
 }

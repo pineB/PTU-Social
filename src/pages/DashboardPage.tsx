@@ -20,6 +20,9 @@ import {
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import { dashboards, type DashboardData } from '../data/dashboards';
+import { useLocation } from 'react-router-dom';
+import { ActivationResultNotice, RegistrationResultNotice } from './AccountPages';
+import { Link } from 'react-router-dom';
 
 const focusCards = {
   student: {
@@ -58,7 +61,7 @@ export default function DashboardPage({ data }: { data: DashboardData }) {
         <Box className="welcome-copy">
           <Typography variant="h4" className="welcome-title">{data.heading}</Typography>
         </Box>
-        <Button href="#dashboard-table" variant="contained" endIcon={<ArrowForwardRoundedIcon />} className="primary-action">
+        <Button component={Link} to={data.role === 'student' ? '/student/tasks' : data.role === 'teacher' ? '/teacher/submissions' : '#dashboard-table'} variant="contained" endIcon={<ArrowForwardRoundedIcon />} className="primary-action">
           {data.role === 'student' ? 'Все задания' : data.role === 'teacher' ? 'Расписание' : 'Заявления'}
         </Button>
       </Box>
@@ -167,11 +170,25 @@ export default function DashboardPage({ data }: { data: DashboardData }) {
 }
 
 export function StudentDashboard() {
-  return <DashboardPage data={dashboards.student} />;
+  const location = useLocation();
+  const routeState = location.state as { registrationSubmitted?: boolean } | null;
+  return (
+    <>
+      <RegistrationResultNotice submitted={routeState?.registrationSubmitted === true} />
+      <DashboardPage data={dashboards.student} />
+    </>
+  );
 }
 
 export function TeacherDashboard() {
-  return <DashboardPage data={dashboards.teacher} />;
+  const location = useLocation();
+  const routeState = location.state as { invitationActivated?: boolean } | null;
+  return (
+    <>
+      <ActivationResultNotice activated={routeState?.invitationActivated === true} />
+      <DashboardPage data={dashboards.teacher} />
+    </>
+  );
 }
 
 export function AcademicOfficeDashboard() {
