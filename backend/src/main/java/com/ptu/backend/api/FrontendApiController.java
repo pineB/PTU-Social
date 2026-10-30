@@ -1,6 +1,8 @@
 package com.ptu.backend.api;
 
 import com.ptu.backend.api.dto.*;
+import com.ptu.backend.domain.ActivityService;
+import com.ptu.backend.review.ReviewService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -9,15 +11,23 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api")
 public class FrontendApiController {
 
+    private final ActivityService activityService;
+    private final ReviewService reviewService;
+
+    public FrontendApiController(ActivityService activityService, ReviewService reviewService) {
+        this.activityService = activityService;
+        this.reviewService = reviewService;
+    }
+
     @PostMapping("/activities")
     public ResponseEntity<ActivityResponse> createActivity(@Valid @RequestBody ActivityCreateRequest request) {
-        throw new UnsupportedOperationException("Activity creation is not implemented yet");
+        return ResponseEntity.ok(activityService.createActivity(request));
     }
 
     @PostMapping("/activities/{activityId}/join")
     public ResponseEntity<ParticipationResponse> joinActivity(@PathVariable Long activityId,
                                                              @Valid @RequestBody JoinActivityRequest request) {
-        throw new UnsupportedOperationException("Participation registration is not implemented yet");
+        return ResponseEntity.ok(activityService.joinActivity(activityId, request));
     }
 
     @GetMapping("/teachers/{teacherId}/budget")
@@ -27,7 +37,13 @@ public class FrontendApiController {
 
     @PostMapping("/reviews")
     public ResponseEntity<ReviewResponse> createReview(@Valid @RequestBody ReviewCreateRequest request) {
-        throw new UnsupportedOperationException("Review creation is not implemented yet");
+        return ResponseEntity.ok(reviewService.createReview(request));
+    }
+
+    @PatchMapping("/reviews/{reviewId}/moderate")
+    public ResponseEntity<ReviewResponse> moderateReview(@PathVariable Long reviewId,
+                                                        @RequestParam boolean approved) {
+        return ResponseEntity.ok(reviewService.moderateReview(reviewId, approved));
     }
 
     @GetMapping("/students/{studentId}/battle-pass")

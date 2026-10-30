@@ -2,22 +2,26 @@ package com.ptu.backend.api.dto;
 
 import com.ptu.backend.domain.ActivityType;
 import com.ptu.backend.domain.ParticipationMode;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 public record ActivityCreateRequest(
-        String title,
+        @NotBlank String title,
         String description,
-        ActivityType type,
-        ParticipationMode participationMode,
-        LocalDateTime startsAt,
-        LocalDateTime endsAt,
-        Integer maxParticipants,
-        Integer minParticipants,
-        Integer requiredActivationPercent,
-        Long teacherId,
-        BigDecimal rewardBoa,
-        BigDecimal rewardBua
+        @NotNull ActivityType type,
+        @NotNull ParticipationMode participationMode,
+        @NotNull LocalDateTime startsAt,
+        @NotNull LocalDateTime endsAt,
+        @NotNull @Positive Integer maxParticipants,
+        @NotNull @PositiveOrZero Integer minParticipants,
+        @NotNull @PositiveOrZero Integer requiredActivationPercent,
+        @NotNull Long teacherId,
+        @NotNull BigDecimal rewardBoa,
+        @NotNull BigDecimal rewardBua
 ) {
 }
