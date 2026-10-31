@@ -7,6 +7,7 @@ import com.ptu.backend.domain.BattlePassSeason;
 import com.ptu.backend.review.ReviewService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
@@ -47,7 +48,16 @@ public class FrontendApiController {
         return ResponseEntity.ok(reviewService.createReview(request));
     }
 
-    @PatchMapping("/reviews/{reviewId}/moderate")
+    @GetMapping("/moderation/academic/reviews")
+    @PreAuthorize("hasRole('MODERATOR')")
+    public ResponseEntity<ReviewModerationQueueResponse> getAcademicReviewQueue(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(reviewService.getAcademicModerationQueue(page, size));
+    }
+
+    @PatchMapping("/moderation/academic/reviews/{reviewId}")
+    @PreAuthorize("hasRole('MODERATOR')")
     public ResponseEntity<ReviewResponse> moderateReview(@PathVariable Long reviewId,
                                                         @RequestParam boolean approved) {
         return ResponseEntity.ok(reviewService.moderateReview(reviewId, approved));

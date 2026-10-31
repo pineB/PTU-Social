@@ -1,33 +1,46 @@
 package com.ptu.backend.domain;
 
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.UUID;
 
+@Service
 public class TeacherBudgetService {
 
+    private final TeacherBudgetRepository teacherBudgetRepository;
+
+    public TeacherBudgetService(TeacherBudgetRepository teacherBudgetRepository) {
+        this.teacherBudgetRepository = teacherBudgetRepository;
+    }
+
     @Transactional
-    public TeacherBudget awardPoints(TeacherBudget budget, BigDecimal awardAmount) {
-        if (budget == null) {
-            throw new IllegalArgumentException("Teacher budget must be provided");
+    public TeacherBudget awardPoints(UUID teacherId, BigDecimal awardAmount) {
+        if (teacherId == null) {
+            throw new IllegalArgumentException("Teacher id must be provided");
         }
         if (awardAmount == null || awardAmount.signum() < 0) {
             throw new IllegalArgumentException("Award amount must be non-negative");
         }
 
-        BigDecimal availableBudget = budget.getAvailableBudget();
-        if (awardAmount.compareTo(availableBudget) > 0) {
-            throw new IllegalArgumentException("Teacher budget exceeded");
+        int updatedRows = teacherBudgetRepository.addSpentBudgetIfAvailable(teacherId, awardAmount);
+        if (updatedRows == 1) {
+            return teacherBudgetRepository.findByTeacherId(teacherId)
+                    .orElseThrow(() -> new IllegalStateException("Teacher budget disappeared during award"));
         }
-
-        budget.setSpentBudget(budget.getSpentBudget().add(awardAmount));
-        return budget;
+        if (!teacherBudgetRepository.existsByTeacherId(teacherId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Teacher budget not found");
+        }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Teacher budget exceeded");
     }
 
     public BigDecimal calculateAwardAmount(BigDecimal baseAmount, int percent) {
-        if (baseAmount == null) {
-            throw new IllegalArgumentException("Base amount is required");
+        if (baseAmount == null || baseAmount.signum() < 0) {
+            throw new IllegalArgumentException("Base amount must be non-negative");
         }
         if (percent < 0 || percent > 100) {
             throw new IllegalArgumentException("Percent must be between 0 and 100");

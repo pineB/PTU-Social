@@ -34,3 +34,4 @@ build/
 
 ### Project docs ###
 docs/
+.m2/

@@ -56,6 +56,7 @@ CREATE TABLE battle_pass_seasons (
     season_name VARCHAR(120) NOT NULL,
     current_level INTEGER NOT NULL DEFAULT 1,
     total_action_points INTEGER NOT NULL DEFAULT 0,
+    premium_track_purchased BOOLEAN NOT NULL DEFAULT FALSE,
     starts_at TIMESTAMP NOT NULL,
     ends_at TIMESTAMP NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -67,6 +68,7 @@ CREATE TABLE levels (
     level_number INTEGER NOT NULL,
     required_xp INTEGER NOT NULL,
     reward_currency INTEGER NOT NULL,
+    reward_case_id BIGINT,
     reward_name VARCHAR(120),
     CONSTRAINT fk_level_battle_pass FOREIGN KEY (battle_pass_season_id) REFERENCES battle_pass_seasons (id)
 );

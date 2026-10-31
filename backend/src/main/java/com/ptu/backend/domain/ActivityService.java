@@ -5,27 +5,29 @@ import com.ptu.backend.api.dto.ActivityResponse;
 import com.ptu.backend.api.dto.JoinActivityRequest;
 import com.ptu.backend.api.dto.ParticipationResponse;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 public class ActivityService {
 
-    private final Map<Long, Activity> activities = new ConcurrentHashMap<>();
-    private final Map<Long, Set<UUID>> registeredStudentsByActivity = new ConcurrentHashMap<>();
-    private final AtomicLong sequence = new AtomicLong(1L);
+    private final ActivityRepository activityRepository;
+    private final ParticipationRepository participationRepository;
 
+    public ActivityService(ActivityRepository activityRepository, ParticipationRepository participationRepository) {
+        this.activityRepository = activityRepository;
+        this.participationRepository = participationRepository;
+    }
+
+    @Transactional
     public ActivityResponse createActivity(ActivityCreateRequest request) {
         validateActivityRequest(request);
 
         Activity activity = new Activity();
-        activity.setId(sequence.getAndIncrement());
         activity.setTitle(request.title());
         activity.setDescription(request.description());
         activity.setType(request.type());
@@ -41,12 +43,10 @@ public class ActivityService {
         activity.setActive(true);
         activity.setCreatedAt(LocalDateTime.now());
 
-        activities.put(activity.getId(), activity);
-        registeredStudentsByActivity.computeIfAbsent(activity.getId(), key -> ConcurrentHashMap.newKeySet());
-
-        return toResponse(activity);
+        return toResponse(activityRepository.save(activity));
     }
 
+    @Transactional
     public ParticipationResponse joinActivity(Long activityId, JoinActivityRequest request) {
         if (activityId == null || request == null) {
             throw new IllegalArgumentException("Activity id and request are required");
@@ -55,61 +55,51 @@ public class ActivityService {
             throw new IllegalArgumentException("Student id is required");
         }
 
-        Activity activity = activities.get(activityId);
-        if (activity == null) {
-            throw new IllegalArgumentException("Activity not found");
-        }
+        Activity activity = activityRepository.findByIdForUpdate(activityId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Activity not found"));
         if (!Boolean.TRUE.equals(activity.getActive())) {
             throw new IllegalArgumentException("Activity is not active");
         }
+        if (activity.getType() != ActivityType.COMMUNITY) {
+            throw new IllegalArgumentException("Only community activities allow public registration");
+        }
 
-        Set<UUID> registeredStudents = registeredStudentsByActivity.computeIfAbsent(activityId, key -> ConcurrentHashMap.newKeySet());
-        if (!registeredStudents.add(request.studentId())) {
+        if (participationRepository.existsByActivityIdAndStudentId(activityId, request.studentId())) {
             throw new IllegalArgumentException("Student is already registered for this activity");
         }
 
-        int registeredCount = registeredStudents.size();
-        if (activity.getParticipationMode() == ParticipationMode.COLLECTIVE) {
-            int requiredParticipants = calculateRequiredParticipants(activity.getMaxParticipants(), activity.getRequiredActivationPercent());
-            if (registeredCount < requiredParticipants) {
-                return new ParticipationResponse(
-                        null,
-                        activity.getId(),
-                        request.studentId(),
-                        ParticipationStatus.REGISTERED,
-                        BigDecimal.ZERO,
-                        BigDecimal.ZERO,
-                        LocalDateTime.now(),
-                        LocalDateTime.now()
-                );
-            }
+        if (participationRepository.countByActivityId(activityId) >= activity.getMaxParticipants()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Activity has reached its participant limit");
         }
 
         Participation participation = new Participation();
         participation.setActivityId(activityId);
         participation.setStudentId(request.studentId());
         participation.setStatus(ParticipationStatus.REGISTERED);
-        participation.setPointsBoa(activity.getRewardBoa());
-        participation.setPointsBua(activity.getRewardBua());
+        participation.setPointsBoa(BigDecimal.ZERO);
+        participation.setPointsBua(BigDecimal.ZERO);
+        participation = participationRepository.save(participation);
 
-        return new ParticipationResponse(
-                1L,
-                activity.getId(),
-                request.studentId(),
-                participation.getStatus(),
-                participation.getPointsBoa(),
-                participation.getPointsBua(),
-                participation.getCreatedAt(),
-                participation.getUpdatedAt()
-        );
+        long registeredCount = participationRepository.countByActivityId(activityId);
+        if (activity.getParticipationMode() == ParticipationMode.COLLECTIVE
+                && registeredCount >= calculateRequiredParticipants(activity.getMaxParticipants(), activity.getRequiredActivationPercent())) {
+            participationRepository.confirmRegisteredByActivityId(
+                    activityId,
+                    ParticipationStatus.REGISTERED,
+                    ParticipationStatus.CONFIRMED
+            );
+            participation.setStatus(ParticipationStatus.CONFIRMED);
+        }
+
+        return toResponse(participation);
     }
 
     public int calculateRequiredParticipants(int groupSize, int thresholdPercent) {
-        if (groupSize <= 0) {
-            return 0;
-        }
         if (thresholdPercent < 0 || thresholdPercent > 100) {
             throw new IllegalArgumentException("Threshold percent must be between 0 and 100");
+        }
+        if (groupSize <= 0) {
+            return 0;
         }
         return (int) Math.ceil(groupSize * thresholdPercent / 100.0d);
     }
@@ -124,15 +114,30 @@ public class ActivityService {
         if (!request.endsAt().isAfter(request.startsAt())) {
             throw new IllegalArgumentException("Activity end time must be after start time");
         }
-        if (request.requiredActivationPercent() < 0 || request.requiredActivationPercent() > 100) {
+        if (request.requiredActivationPercent() == null
+                || request.requiredActivationPercent() < 0 || request.requiredActivationPercent() > 100) {
             throw new IllegalArgumentException("Required activation percent must be between 0 and 100");
         }
-        if (request.maxParticipants() <= 0) {
+        if (request.maxParticipants() == null || request.maxParticipants() <= 0) {
             throw new IllegalArgumentException("Max participants must be positive");
         }
-        if (request.minParticipants() > request.maxParticipants()) {
+        if (request.minParticipants() == null || request.minParticipants() < 0
+                || request.minParticipants() > request.maxParticipants()) {
             throw new IllegalArgumentException("Min participants cannot exceed max participants");
         }
+    }
+
+    private ParticipationResponse toResponse(Participation participation) {
+        return new ParticipationResponse(
+                participation.getId(),
+                participation.getActivityId(),
+                participation.getStudentId(),
+                participation.getStatus(),
+                participation.getPointsBoa(),
+                participation.getPointsBua(),
+                participation.getCreatedAt(),
+                participation.getUpdatedAt()
+        );
     }
 
     private ActivityResponse toResponse(Activity activity) {

@@ -5,9 +5,13 @@ import com.ptu.backend.review.filter.BlockedWordsReviewFilterStrategy;
 import com.ptu.backend.review.filter.MinLengthReviewFilterStrategy;
 import com.ptu.backend.review.filter.SpamReviewFilterStrategy;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.util.UUID;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -25,18 +29,18 @@ class DomainBusinessRulesTest {
 
     @Test
     void teacherBudgetCannotBeExceeded() {
-        TeacherBudgetService service = new TeacherBudgetService();
-        TeacherBudget budget = new TeacherBudget();
-        budget.setTeacherId(UUID.fromString("00000000-0000-0000-0000-000000000007"));
-        budget.setTotalBudget(new BigDecimal("150.00"));
-        budget.setSpentBudget(BigDecimal.ZERO);
+        UUID teacherId = UUID.fromString("00000000-0000-0000-0000-000000000007");
+        TeacherBudgetRepository repository = mock(TeacherBudgetRepository.class);
+        when(repository.addSpentBudgetIfAvailable(teacherId, new BigDecimal("200.00"))).thenReturn(0);
+        when(repository.existsByTeacherId(teacherId)).thenReturn(true);
+        TeacherBudgetService service = new TeacherBudgetService(repository);
 
-        IllegalArgumentException ex = assertThrows(
-                IllegalArgumentException.class,
-                () -> service.awardPoints(budget, new BigDecimal("200.00"))
+        ResponseStatusException ex = assertThrows(
+            ResponseStatusException.class,
+            () -> service.awardPoints(teacherId, new BigDecimal("200.00"))
         );
 
-        assertEquals("Teacher budget exceeded", ex.getMessage());
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
     }
 
     @Test

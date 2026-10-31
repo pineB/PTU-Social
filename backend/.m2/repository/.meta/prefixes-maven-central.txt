@@ -522,12 +522,14 @@
 /com/aibton
 /com/aidangrabe
 /com/aidlab
+/com/aidlux
 /com/aidocing
 /com/aientrophy
 /com/aigens
 /com/aigoox
 /com/aihecong
 /com/aihook
+/com/aikoql
 /com/ailabtools
 /com/ailbb
 /com/ailyr
@@ -722,6 +724,7 @@
 /com/amakoragroup
 /com/amap
 /com/amarjanica
+/com/amarulasolutions
 /com/amashchenko
 /com/amazon
 /com/amazonaws
@@ -1334,6 +1337,7 @@
 /com/axiomalaska
 /com/axisapplications
 /com/axisj
+/com/axisvela
 /com/axlabs
 /com/axlradius
 /com/axokoi
@@ -2176,6 +2180,7 @@
 /com/cebest
 /com/cebglobal
 /com/cebpubservice
+/com/ceburu
 /com/cedac
 /com/cedarpolicy
 /com/cedarsoft
@@ -4432,6 +4437,7 @@
 /com/flozano
 /com/fluenda
 /com/fluentco
+/com/fluentresult
 /com/fluffyluffs
 /com/fluffypeople
 /com/fluidattacks
@@ -4624,6 +4630,7 @@
 /com/futeh
 /com/futunn
 /com/future94
+/com/futureagi
 /com/futureble
 /com/futuremind
 /com/futureplatforms
@@ -6778,6 +6785,7 @@
 /com/kirekov
 /com/kirgor
 /com/kirkk
+/com/kiselevlabs
 /com/kitakkun
 /com/kitedi
 /com/kitfox
@@ -11681,6 +11689,7 @@
 /com/stoyanr
 /com/stoyanvuchev
 /com/straal
+/com/stract-api
 /com/straitchain
 /com/strandls
 /com/strangeparticle
@@ -11736,6 +11745,7 @@
 /com/subnit
 /com/subscriptionflow
 /com/subshell
+/com/substringtechnologies
 /com/subtlesolution
 /com/succsoft
 /com/suchtool
@@ -14101,6 +14111,7 @@
 /com/zapfetch
 /com/zapic
 /com/zappos
+/com/zapsmtp
 /com/zara4
 /com/zaradai
 /com/zarbosoft
@@ -16405,6 +16416,7 @@
 /io/permazen
 /io/permisso
 /io/permit
+/io/perms
 /io/persona3
 /io/personium
 /io/pfpt
@@ -17130,6 +17142,7 @@
 /io/verizon
 /io/verniv
 /io/verqu
+/io/versola
 /io/vertesia
 /io/vertigo
 /io/vertx
@@ -17155,6 +17168,7 @@
 /io/voucherify
 /io/voxexchange
 /io/voxkit
+/io/voxtrics
 /io/vpndetection
 /io/vproxy
 /io/vpv
@@ -20748,6 +20762,7 @@
 /org/helenus
 /org/helgoboss
 /org/helixflo
+/org/helloao
 /org/hellojavaer
 /org/hellojsp
 /org/helmetsrequired
