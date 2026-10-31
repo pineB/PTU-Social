@@ -6,7 +6,9 @@ import org.springframework.stereotype.Service;
 public class AcademicRatingService {
 
     public int calculateAcademicRating(int base, int daysLate) {
-        double multiplier = Math.max(0.5, 1 - 0.01 * daysLate);
-        return (int) Math.floor(base * multiplier);
+        int safeBase = Math.max(0, base);
+        int safeLateDays = Math.max(0, daysLate);
+        double multiplier = Math.max(0.5, 1 - 0.01 * safeLateDays);
+        return Math.max(0, (int) Math.floor(safeBase * multiplier));
     }
 }

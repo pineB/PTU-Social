@@ -3,9 +3,13 @@ package com.ptu.backend.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
+
+import com.ptu.backend.domain.AcademicRatingHistory;
 import com.ptu.backend.domain.Submission;
 import com.ptu.backend.domain.SubmissionStatus;
 import com.ptu.backend.domain.Task;
@@ -77,5 +81,63 @@ class SubmissionServiceTest {
         assertEquals(1, returned.getRevisionCount());
         assertEquals(2, returned.getVersionNumber());
         verify(submissionRepository).save(returned);
+    }
+
+    @Test
+    void shouldNotAwardAcademicRatingTwiceForApprovedSubmission() {
+        Submission submission = new Submission();
+        submission.setId(12L);
+        submission.setStudentId(10L);
+        submission.setStatus(SubmissionStatus.PENDING);
+        submission.setAwardedRating(null);
+
+        Task task = new Task();
+        task.setId(20L);
+        task.setTitle("Final task");
+        task.setDueDate(LocalDateTime.now().plusDays(2));
+        submission.setTask(task);
+
+        when(submissionRepository.findById(12L)).thenReturn(Optional.of(submission));
+        when(submissionRepository.save(any(Submission.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(historyRepository.findByStudentIdAndTaskId(10L, 20L)).thenReturn(Optional.empty());
+        when(academicRatingService.calculateAcademicRating(100, 0)).thenReturn(100);
+
+        Submission firstResult = submissionService.reviewSubmission(12L, new com.ptu.backend.web.dto.ReviewSubmissionRequest(SubmissionStatus.APPROVED, "ok", 100));
+
+        assertEquals(SubmissionStatus.APPROVED, firstResult.getStatus());
+        assertEquals(100, firstResult.getAwardedRating());
+
+        submission.setStatus(SubmissionStatus.APPROVED);
+        Submission secondResult = submissionService.reviewSubmission(12L, new com.ptu.backend.web.dto.ReviewSubmissionRequest(SubmissionStatus.APPROVED, "ok", 100));
+
+        assertEquals(100, secondResult.getAwardedRating());
+        verify(academicRatingService).calculateAcademicRating(100, 0);
+    }
+
+    @Test
+    void shouldReturnOnlyPendingAndReworkSubmissionsForModerationQueue() {
+        Submission pending = new Submission();
+        pending.setId(1L);
+        pending.setStatus(SubmissionStatus.PENDING);
+        pending.setSubmittedAt(LocalDateTime.now().minusHours(2));
+
+        Submission rework = new Submission();
+        rework.setId(2L);
+        rework.setStatus(SubmissionStatus.REWORK);
+        rework.setSubmittedAt(LocalDateTime.now().minusHours(1));
+
+        Submission approved = new Submission();
+        approved.setId(3L);
+        approved.setStatus(SubmissionStatus.APPROVED);
+        approved.setSubmittedAt(LocalDateTime.now());
+
+        when(submissionRepository.findByTask_Group_IdAndStatusInOrderBySubmittedAtAsc(12L, List.of(SubmissionStatus.PENDING, SubmissionStatus.REWORK)))
+            .thenReturn(List.of(pending, rework));
+
+        List<Submission> queue = submissionService.getModerationQueueForGroup(12L);
+
+        assertEquals(2, queue.size());
+        assertEquals(SubmissionStatus.PENDING, queue.get(0).getStatus());
+        assertEquals(SubmissionStatus.REWORK, queue.get(1).getStatus());
     }
 }

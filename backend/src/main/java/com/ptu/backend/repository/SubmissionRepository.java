@@ -13,4 +13,6 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
     Optional<Submission> findFirstByTaskIdAndStudentIdOrderBySubmittedAtDesc(Long taskId, Long studentId);
 
     List<Submission> findByStudentIdAndStatus(Long studentId, SubmissionStatus status);
+
+    List<Submission> findByTask_Group_IdAndStatusInOrderBySubmittedAtAsc(Long groupId, List<SubmissionStatus> statuses);
 }

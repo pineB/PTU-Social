@@ -71,4 +71,24 @@ class TaskServiceTest {
 
         assertEquals("Teacher is not assigned to the group and discipline", exception.getMessage());
     }
+
+    @Test
+    void shouldRejectTaskCreationForForeignGroupEvenIfTeacherExistsElsewhere() {
+        CreateTaskRequest request = new CreateTaskRequest(
+            "Task 3",
+            "Description",
+            LocalDateTime.now().plusDays(3),
+            99L,
+            4L
+        );
+
+        when(teacherAssignmentRepository.existsByTeacherIdAndGroupIdAndDisciplineId(10L, 99L, 4L)).thenReturn(false);
+
+        IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> taskService.createTask(10L, request)
+        );
+
+        assertEquals("Teacher is not assigned to the group and discipline", exception.getMessage());
+    }
 }

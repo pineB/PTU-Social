@@ -56,8 +56,11 @@ public class SubmissionService {
         submission.setAttachmentUrl(request.attachmentUrl());
         submission.setStatus(SubmissionStatus.PENDING);
         submission.setArchived(false);
-        submission.setRevisionCount(previous.map(Submission::getRevisionCount).orElse(0));
-        submission.setVersionNumber(previous.map(Submission::getVersionNumber).map(v -> v + 1).orElse(1));
+
+        Integer revisionCount = previous.isPresent() ? previous.get().getRevisionCount() : 0;
+        Integer versionNumber = previous.isPresent() ? previous.get().getVersionNumber() + 1 : 1;
+        submission.setRevisionCount(revisionCount);
+        submission.setVersionNumber(versionNumber);
         return submissionRepository.save(submission);
     }
 
@@ -89,6 +92,10 @@ public class SubmissionService {
         }
 
         if (request.status() == SubmissionStatus.APPROVED) {
+            if (submission.getStatus() == SubmissionStatus.APPROVED) {
+                return submission;
+            }
+
             submission.setStatus(SubmissionStatus.APPROVED);
             submission.setTeacherFeedback(request.feedback());
             submission.setArchived(false);
@@ -130,6 +137,14 @@ public class SubmissionService {
     @Transactional(readOnly = true)
     public Optional<Submission> getLatestSubmission(Long taskId, Long studentId) {
         return submissionRepository.findFirstByTaskIdAndStudentIdOrderBySubmittedAtDesc(taskId, studentId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Submission> getModerationQueueForGroup(Long groupId) {
+        return submissionRepository.findByTask_Group_IdAndStatusInOrderBySubmittedAtAsc(
+            groupId,
+            List.of(SubmissionStatus.PENDING, SubmissionStatus.REWORK)
+        );
     }
 
     private int calculateLateDays(Task task, LocalDateTime submittedAt) {
