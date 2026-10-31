@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 @Table(name = "battle_pass_seasons")
@@ -19,7 +20,7 @@ public class BattlePassSeason {
     private Long id;
 
     @Column(name = "student_id", nullable = false)
-    private Long studentId;
+    private UUID studentId;
 
     @Column(name = "season_name", nullable = false, length = 120)
     private String seasonName;

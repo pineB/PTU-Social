@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 @Table(
@@ -29,7 +30,7 @@ public class InventoryItem {
     private Case caseRef;
 
     @Column(name = "owner_student_id", nullable = false)
-    private Long ownerStudentId;
+    private UUID ownerStudentId;
 
     @Column(name = "item_name", nullable = false, length = 120)
     private String itemName;

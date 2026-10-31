@@ -7,6 +7,7 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 @Table(
@@ -32,7 +33,7 @@ public class Participation {
     private Long activityId;
 
     @Column(name = "student_id", nullable = false)
-    private Long studentId;
+    private UUID studentId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)

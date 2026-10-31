@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 @Table(
@@ -29,7 +30,7 @@ public class Review {
     private Long activityId;
 
     @Column(name = "author_id", nullable = false)
-    private Long authorId;
+    private UUID authorId;
 
     @Column(nullable = false, length = 2000)
     private String text;
@@ -42,7 +43,7 @@ public class Review {
     private ReviewStatus status = ReviewStatus.PENDING_MODERATION;
 
     @Column(name = "moderated_by")
-    private Long moderatedBy;
+    private UUID moderatedBy;
 
     @Column(name = "reward_awarded", nullable = false)
     private boolean rewardAwarded = false;

@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -38,15 +39,16 @@ class ActivityReviewApiRulesTest {
                 11,
                 3,
                 45,
-                7L,
+                UUID.fromString("00000000-0000-0000-0000-000000000007"),
                 BigDecimal.TEN,
                 BigDecimal.ONE
         );
 
         service.createActivity(request);
-        var response = service.joinActivity(1L, new JoinActivityRequest(1L, 1L, 1));
+        UUID studentId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        var response = service.joinActivity(1L, new JoinActivityRequest(studentId, 1L, 1));
 
-        assertEquals(1L, response.studentId());
+        assertEquals(studentId, response.studentId());
     }
 
     @Test
@@ -55,7 +57,12 @@ class ActivityReviewApiRulesTest {
 
         IllegalArgumentException ex = assertThrows(
                 IllegalArgumentException.class,
-                () -> service.createReview(new ReviewCreateRequest(1L, 2L, 5, "short text"))
+                () -> service.createReview(new ReviewCreateRequest(
+                    1L,
+                    UUID.fromString("00000000-0000-0000-0000-000000000002"),
+                    5,
+                    "short text"
+                ))
         );
 
         assertEquals("Review rejected by moderation filters", ex.getMessage());

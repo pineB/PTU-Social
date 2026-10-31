@@ -1,7 +1,9 @@
 package com.ptu.backend.api.dto;
 
+import java.util.UUID;
+
 public record BattlePassResponse(
-        Long studentId,
+        UUID studentId,
         String seasonName,
         Integer currentLevel,
         Integer totalActionPoints,

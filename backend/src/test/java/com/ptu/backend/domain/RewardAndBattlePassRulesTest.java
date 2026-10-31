@@ -3,6 +3,7 @@ package com.ptu.backend.domain;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -12,7 +13,7 @@ class RewardAndBattlePassRulesTest {
     @Test
     void teacherBudgetRespectsBoaAndBuaAwardTotal() {
         TeacherBudget budget = new TeacherBudget();
-        budget.setTeacherId(1L);
+        budget.setTeacherId(UUID.fromString("00000000-0000-0000-0000-000000000001"));
         budget.setTotalBudget(new BigDecimal("100.00"));
         budget.setSpentBudget(BigDecimal.ZERO);
 
@@ -47,15 +48,16 @@ class RewardAndBattlePassRulesTest {
         activity.setRewardBua(new BigDecimal("50.00"));
 
         TeacherBudget budget = new TeacherBudget();
-        budget.setTeacherId(5L);
+        budget.setTeacherId(UUID.fromString("00000000-0000-0000-0000-000000000005"));
         budget.setTotalBudget(new BigDecimal("250.00"));
         budget.setSpentBudget(BigDecimal.ZERO);
 
-        rewardService.awardParticipation(activity, 99L, 50, 50, budget);
+        UUID studentId = UUID.fromString("00000000-0000-0000-0000-000000000099");
+        rewardService.awardParticipation(activity, studentId, 50, 50, budget);
 
         IllegalStateException ex = assertThrows(
                 IllegalStateException.class,
-                () -> rewardService.awardParticipation(activity, 99L, 50, 50, budget)
+                () -> rewardService.awardParticipation(activity, studentId, 50, 50, budget)
         );
 
         assertEquals("Duplicate reward award for the same student and activity", ex.getMessage());
@@ -67,7 +69,8 @@ class RewardAndBattlePassRulesTest {
 
         BattlePassSeason season = new BattlePassSeason();
         season.setId(7L);
-        season.setStudentId(42L);
+        UUID studentId = UUID.fromString("00000000-0000-0000-0000-000000000042");
+        season.setStudentId(studentId);
         season.setCurrentLevel(3);
         season.setPremiumTrackPurchased(false);
 
@@ -75,16 +78,16 @@ class RewardAndBattlePassRulesTest {
         level.setLevelNumber(3);
         level.setRewardCaseId(1L);
 
-        InventoryItem item = rewardService.claimLevelReward(season, level, 42L);
+        InventoryItem item = rewardService.claimLevelReward(season, level, studentId);
         assertEquals("Bronze chest", item.getItemName());
 
         IllegalStateException ex = assertThrows(
                 IllegalStateException.class,
-                () -> rewardService.claimLevelReward(season, level, 42L)
+                () -> rewardService.claimLevelReward(season, level, studentId)
         );
         assertEquals("Reward for this level has already been granted", ex.getMessage());
 
-        rewardService.purchasePremiumTrack(season, 42L, new BigDecimal("40.00"));
+        rewardService.purchasePremiumTrack(season, studentId, new BigDecimal("40.00"));
         assertEquals(true, season.getPremiumTrackPurchased());
     }
 }

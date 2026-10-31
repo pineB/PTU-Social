@@ -9,6 +9,7 @@ import jakarta.validation.constraints.PositiveOrZero;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 public record ActivityCreateRequest(
         @NotBlank String title,
@@ -20,7 +21,7 @@ public record ActivityCreateRequest(
         @NotNull @Positive Integer maxParticipants,
         @NotNull @PositiveOrZero Integer minParticipants,
         @NotNull @PositiveOrZero Integer requiredActivationPercent,
-        @NotNull Long teacherId,
+        @NotNull UUID teacherId,
         @NotNull BigDecimal rewardBoa,
         @NotNull BigDecimal rewardBua
 ) {

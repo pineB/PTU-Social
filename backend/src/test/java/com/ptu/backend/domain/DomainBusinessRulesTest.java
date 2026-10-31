@@ -7,6 +7,7 @@ import com.ptu.backend.review.filter.SpamReviewFilterStrategy;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -26,7 +27,7 @@ class DomainBusinessRulesTest {
     void teacherBudgetCannotBeExceeded() {
         TeacherBudgetService service = new TeacherBudgetService();
         TeacherBudget budget = new TeacherBudget();
-        budget.setTeacherId(7L);
+        budget.setTeacherId(UUID.fromString("00000000-0000-0000-0000-000000000007"));
         budget.setTotalBudget(new BigDecimal("150.00"));
         budget.setSpentBudget(BigDecimal.ZERO);
 

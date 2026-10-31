@@ -11,7 +11,7 @@ CREATE TABLE activities (
     required_activation_percent INTEGER NOT NULL,
     reward_boa DECIMAL(5,2) NOT NULL DEFAULT 0,
     reward_bua DECIMAL(5,2) NOT NULL DEFAULT 0,
-    teacher_id BIGINT NOT NULL,
+    teacher_id UUID NOT NULL,
     active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -19,7 +19,7 @@ CREATE TABLE activities (
 CREATE TABLE participations (
     id BIGSERIAL PRIMARY KEY,
     activity_id BIGINT NOT NULL,
-    student_id BIGINT NOT NULL,
+    student_id UUID NOT NULL,
     status VARCHAR(30) NOT NULL DEFAULT 'REGISTERED',
     points_boa DECIMAL(5,2) DEFAULT 0,
     points_bua DECIMAL(5,2) DEFAULT 0,
@@ -30,7 +30,7 @@ CREATE TABLE participations (
 
 CREATE TABLE teacher_budgets (
     id BIGSERIAL PRIMARY KEY,
-    teacher_id BIGINT NOT NULL UNIQUE,
+    teacher_id UUID NOT NULL UNIQUE,
     total_budget DECIMAL(19,2) NOT NULL DEFAULT 0,
     spent_budget DECIMAL(19,2) NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -40,11 +40,11 @@ CREATE TABLE teacher_budgets (
 CREATE TABLE reviews (
     id BIGSERIAL PRIMARY KEY,
     activity_id BIGINT NOT NULL,
-    author_id BIGINT NOT NULL,
+    author_id UUID NOT NULL,
     text TEXT NOT NULL,
     rating INTEGER NOT NULL,
     status VARCHAR(30) NOT NULL DEFAULT 'PENDING_MODERATION',
-    moderated_by BIGINT,
+    moderated_by UUID,
     reward_awarded BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -52,7 +52,7 @@ CREATE TABLE reviews (
 
 CREATE TABLE battle_pass_seasons (
     id BIGSERIAL PRIMARY KEY,
-    student_id BIGINT NOT NULL,
+    student_id UUID NOT NULL,
     season_name VARCHAR(120) NOT NULL,
     current_level INTEGER NOT NULL DEFAULT 1,
     total_action_points INTEGER NOT NULL DEFAULT 0,
@@ -84,7 +84,7 @@ CREATE TABLE cases (
 CREATE TABLE inventory_items (
     id BIGSERIAL PRIMARY KEY,
     case_id BIGINT NOT NULL,
-    owner_student_id BIGINT NOT NULL,
+    owner_student_id UUID NOT NULL,
     item_name VARCHAR(120) NOT NULL,
     rarity VARCHAR(30) NOT NULL,
     quantity INTEGER NOT NULL DEFAULT 1,

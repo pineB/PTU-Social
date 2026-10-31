@@ -1,7 +1,9 @@
 package com.ptu.backend.api.dto;
 
+import java.util.UUID;
+
 public record JoinActivityRequest(
-        Long studentId,
+        UUID studentId,
         Long activityId,
         Integer count
 ) {

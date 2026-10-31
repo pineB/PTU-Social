@@ -9,14 +9,15 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.UUID;
 
 @Service
 public class BattlePassRewardService {
 
     private final Map<Long, Case> cases = new ConcurrentHashMap<>();
-    private final Map<Long, List<InventoryItem>> inventoryByStudent = new ConcurrentHashMap<>();
-    private final Map<Long, Set<Integer>> claimedLevelRewardsByStudent = new ConcurrentHashMap<>();
-    private final Map<Long, Set<Integer>> unlockedPremiumLevelsByStudent = new ConcurrentHashMap<>();
+    private final Map<UUID, List<InventoryItem>> inventoryByStudent = new ConcurrentHashMap<>();
+    private final Map<UUID, Set<Integer>> claimedLevelRewardsByStudent = new ConcurrentHashMap<>();
+    private final Map<UUID, Set<Integer>> unlockedPremiumLevelsByStudent = new ConcurrentHashMap<>();
     private final AtomicLong inventorySequence = new AtomicLong(1L);
 
     public BattlePassRewardService() {
@@ -37,7 +38,7 @@ public class BattlePassRewardService {
         cases.put(rare.getId(), rare);
     }
 
-    public InventoryItem claimLevelReward(BattlePassSeason season, Level level, Long studentId) {
+    public InventoryItem claimLevelReward(BattlePassSeason season, Level level, UUID studentId) {
         if (season == null || level == null || studentId == null) {
             throw new IllegalArgumentException("Season, level and student id are required");
         }
@@ -57,7 +58,7 @@ public class BattlePassRewardService {
         return openCase(level.getRewardCaseId(), studentId);
     }
 
-    public void purchasePremiumTrack(BattlePassSeason season, Long studentId, BigDecimal spentCurrency) {
+    public void purchasePremiumTrack(BattlePassSeason season, UUID studentId, BigDecimal spentCurrency) {
         if (season == null || studentId == null) {
             throw new IllegalArgumentException("Season and student id are required");
         }
@@ -73,7 +74,7 @@ public class BattlePassRewardService {
         }
     }
 
-    public InventoryItem openCase(Long caseId, Long studentId) {
+    public InventoryItem openCase(Long caseId, UUID studentId) {
         if (caseId == null || studentId == null) {
             throw new IllegalArgumentException("Case id and student id are required");
         }
@@ -96,7 +97,7 @@ public class BattlePassRewardService {
         return item;
     }
 
-    public List<InventoryItem> getInventory(Long studentId) {
+    public List<InventoryItem> getInventory(UUID studentId) {
         return inventoryByStudent.getOrDefault(studentId, List.of());
     }
 }

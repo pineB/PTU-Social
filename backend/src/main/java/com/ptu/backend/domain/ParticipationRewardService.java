@@ -3,6 +3,7 @@ package com.ptu.backend.domain;
 import java.math.BigDecimal;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.UUID;
 
 public class ParticipationRewardService {
 
@@ -13,7 +14,7 @@ public class ParticipationRewardService {
         this.teacherBudgetService = teacherBudgetService;
     }
 
-    public Participation awardParticipation(Activity activity, Long studentId, int boaPercent, int buaPercent, TeacherBudget budget) {
+    public Participation awardParticipation(Activity activity, UUID studentId, int boaPercent, int buaPercent, TeacherBudget budget) {
         if (activity == null) {
             throw new IllegalArgumentException("Activity is required");
         }

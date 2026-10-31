@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -17,7 +18,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class ActivityService {
 
     private final Map<Long, Activity> activities = new ConcurrentHashMap<>();
-    private final Map<Long, Set<Long>> registeredStudentsByActivity = new ConcurrentHashMap<>();
+    private final Map<Long, Set<UUID>> registeredStudentsByActivity = new ConcurrentHashMap<>();
     private final AtomicLong sequence = new AtomicLong(1L);
 
     public ActivityResponse createActivity(ActivityCreateRequest request) {
@@ -62,7 +63,7 @@ public class ActivityService {
             throw new IllegalArgumentException("Activity is not active");
         }
 
-        Set<Long> registeredStudents = registeredStudentsByActivity.computeIfAbsent(activityId, key -> ConcurrentHashMap.newKeySet());
+        Set<UUID> registeredStudents = registeredStudentsByActivity.computeIfAbsent(activityId, key -> ConcurrentHashMap.newKeySet());
         if (!registeredStudents.add(request.studentId())) {
             throw new IllegalArgumentException("Student is already registered for this activity");
         }

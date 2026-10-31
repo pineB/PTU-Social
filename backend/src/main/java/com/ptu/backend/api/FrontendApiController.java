@@ -8,6 +8,7 @@ import com.ptu.backend.review.ReviewService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api")
@@ -37,7 +38,7 @@ public class FrontendApiController {
     }
 
     @GetMapping("/teachers/{teacherId}/budget")
-    public ResponseEntity<TeacherBudgetResponse> getTeacherBudget(@PathVariable Long teacherId) {
+    public ResponseEntity<TeacherBudgetResponse> getTeacherBudget(@PathVariable UUID teacherId) {
         throw new UnsupportedOperationException("Teacher budget read is not implemented yet");
     }
 
@@ -53,7 +54,7 @@ public class FrontendApiController {
     }
 
     @GetMapping("/students/{studentId}/battle-pass")
-    public ResponseEntity<BattlePassResponse> getBattlePass(@PathVariable Long studentId) {
+    public ResponseEntity<BattlePassResponse> getBattlePass(@PathVariable UUID studentId) {
         throw new UnsupportedOperationException("Battle pass read is not implemented yet");
     }
 

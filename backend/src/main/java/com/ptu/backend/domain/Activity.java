@@ -7,6 +7,7 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 @Table(name = "activities")
@@ -55,7 +56,7 @@ public class Activity {
     private BigDecimal rewardBua = BigDecimal.ZERO;
 
     @Column(name = "teacher_id", nullable = false)
-    private Long teacherId;
+    private UUID teacherId;
 
     @Column(nullable = false)
     private Boolean active = true;

@@ -5,6 +5,7 @@ import com.ptu.backend.domain.ParticipationMode;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 public record ActivityResponse(
         Long id,
@@ -19,7 +20,7 @@ public record ActivityResponse(
         Integer requiredActivationPercent,
         BigDecimal rewardBoa,
         BigDecimal rewardBua,
-        Long teacherId,
+        UUID teacherId,
         Boolean active,
         LocalDateTime createdAt
 ) {
