@@ -135,3 +135,67 @@
 +После реализации пришли результат ./mvnw verify и покажи, что старые 21 тест не сломались.
 +
 +
+
+# 2026-10-31T15:35:15.757Z
++Контекст: Бэкенд готов. Теперь нужно настроить Nginx как единую точку входа (reverse proxy) и раздатчик статики в docker-compose.yml. Учти, что фронтенд (React) пока в разработке, папки со сбилженной статикой (например, frontend/dist) может не быть.
++
++Задачи:
++
++Создай nginx/nginx.conf:
++
++server на порту 80.
++
++Локация /api/ должна проксироваться на http://backend:8080 (внутренний порт контейнера). Важно: передавай заголовки Authorization, X-Real-IP и X-Forwarded-For, чтобы Rate Limiting на бэкенде корректно определял IP клиента (иначе все запросы будут выглядеть как с одного IP).
++
++Локация / должна раздавать статику (например, root /usr/share/nginx/html; try_files $uri $uri/ /index.html;).
++
++Настрой client_max_body_size 10M; (на будущее для загрузки файлов).
++
++Обнови docker-compose.yml:
++
++Добавь сервис nginx (образ nginx:alpine).
++
++Пробрось порт 80:80.
++
++Примонтируй nginx/nginx.conf в /etc/nginx/conf.d/default.conf.
++
++Примонтируй папку frontend/dist (или куда Даня будет билдить фронт) в /usr/share/nginx/html. Если папки нет — создай пустую заглушку frontend/dist/index.html с текстом «Frontend is building...», чтобы Nginx не падал с 404.
++
++Убедись, что nginx зависит от backend (depends_on).
++
++Безопасность (порт бэкенда):
++
++В docker-compose.yml убери проброс порта 8080:8080 у сервиса backend наружу (оставь только expose: 8080), чтобы весь трафик шёл строго через Nginx. (Если это сломает текущие тесты или смоук — верни обратно, но напиши об этом).
++
++Healthcheck для Nginx:
++
++Добавь в compose healthcheck, который дергает curl -f http://localhost/api/actuator/health (убедись, что Nginx корректно проксирует Actuator).
++
++Документация:
++
++Добавь в docs/agent-log.md запись о настройке Nginx и изменении портов.
++
++Проверка:
++
++docker compose up -d --build.
++
++curl http://localhost/api/actuator/health должен вернуть {"status":"UP"}.
++
++curl http://localhost/ должен вернуть заглушку.
++
++Убедись, что Rate Limiting всё ещё работает (сделай 6 запросов на логин через localhost/api/auth/login — 6-й должен вернуть 429).
++
++Ограничения: Не ломай существующие 30 тестов (./mvnw verify). Если что-то идёт не так — предложи альтернативу. Сначала предложи план.
+
+# 2026-10-31T15:37:36.419Z
++y. План отличный. Особенно респект за X-Forwarded-For $remote_addr (защита от подделки IP для обхода Rate Limit) и за wget вместо curl в healthcheck (не надо тащить лишний пакет в alpine).
++
++Действуй по плану.
++
++Используй wget для healthcheck (вариант с отдельным Dockerfile — оверинжиниринг).
++
++Заглушку frontend/dist/index.html создавай и коммить, а frontend/dist/ добавим в .gitignore позже, когда Даня настроит сборку.
++
++Обязательно проверь, что разные X-Forwarded-For не обходят лимит (как ты и написал).
++
++После проверки обнови docs/agent-log.md.
