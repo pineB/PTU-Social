@@ -7,6 +7,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -54,6 +56,19 @@ public class GlobalExceptionHandler {
 		log.warn("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());
 		return ResponseEntity.status(HttpStatus.CONFLICT)
 				.body(ApiError.of(409, "Conflict", "Запись уже существует или нарушает ограничения", request));
+	}
+
+	@ExceptionHandler(AccessDeniedException.class)
+	public ResponseEntity<ApiError> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
+		return ResponseEntity.status(HttpStatus.FORBIDDEN)
+				.body(ApiError.of(403, "Forbidden", "Недостаточно прав", request));
+	}
+
+	@ExceptionHandler(HttpMessageNotReadableException.class)
+	public ResponseEntity<ApiError> handleUnreadableBody(HttpMessageNotReadableException ex,
+			HttpServletRequest request) {
+		return ResponseEntity.badRequest()
+				.body(ApiError.of(400, "Bad Request", "Некорректное тело запроса", request));
 	}
 
 	@ExceptionHandler(Exception.class)

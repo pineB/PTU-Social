@@ -75,3 +75,63 @@
 +В RateLimitIT проверь, что заголовок Retry-After реально приходит при 429.
 +
 +После реализации обнови docs/spec/api.md (добавь 429 и Retry-After) и docs/agent-log.md.
+
+# 2026-10-31T15:24:29.468Z
++Контекст: Продолжаем. Rate Limiting и единый формат ошибок готовы. Теперь нужен модуль заявок на справки (Certificate Requests).
++
++Задачи:
++
++БД (Flyway V3): Создай миграцию V3__certificate_requests.sql.
++
++Таблица certificate_requests: id (uuid), student_id (fk на users), type (varchar: 'EDUCATION', 'INCOME', 'MILITARY'), status (varchar: 'PENDING', 'APPROVED', 'REJECTED'), rejection_reason (text, nullable), created_at, updated_at.
++
++Индексы по student_id и status.
++
++Добавь CHECK constraint на допустимые значения type и status.
++
++Сущности и Репозиторий: Создай CertificateRequest (с audit-полями через @CreationTimestamp/@UpdateTimestamp) и CertificateRequestRepository.
++
++Сервис и DTO: CertificateRequestService. DTO для создания (только type), для ответа (все поля) и для смены статуса (status, rejectionReason).
++
++Контроллеры:
++
++POST /api/certificates — студент создаёт заявку. По умолчанию статус PENDING.
++
++GET /api/certificates/my — студент видит только свои заявки.
++
++GET /api/certificates — учебная часть (ACADEMIC_OFFICE) видит все заявки (с возможностью фильтра ?status=PENDING).
++
++PATCH /api/certificates/{id}/status — учебная часть одобряет или отклоняет. Если REJECTED — rejectionReason обязателен (валидация на уровне DTO/Сервиса).
++
++Безопасность: Используй @PreAuthorize("hasRole('STUDENT')") и hasRole('ACADEMIC_OFFICE'). Студент не должен иметь доступ к общим заявкам или смене статуса (вернёт 403).
++
++Тесты: Интеграционные тесты (Testcontainers):
++
++студент создаёт и видит свою заявку;
++
++учебная часть одобряет;
++
++отклонение без причины возвращает 400;
++
++студент пытается одобрить -> 403.
++
++Документация: После реализации добавь эндпоинты в docs/spec/api.md и допиши в docs/agent-log.md.
++
++Ограничения: Используй существующий ApiError для ошибок. Тонкие контроллеры, вся логика в сервисе. Сначала предложи план, потом пиши код.
+
+# 2026-10-31T15:26:09.705Z
++y. План отличный, особенно хорошо, что заметил отсутствие @EnableMethodSecurity и порядок обработки исключений (AccessDeniedException перед catch-all). Действуй.
++
++Твои дефолты одобряю:
++
++Пагинация (Page, дефолт 20) — ок.
++
++ON DELETE CASCADE по student_id — ок.
++
++Обнуление rejectionReason при APPROVED — ок.
++
++Уточнение по коду: убедись, что в CertificateRequestView поле studentName заполняется через JOIN FETCH или @EntityGraph в репозитории (чтобы не было проблемы N+1 запроса при выводе списка).
++
++После реализации пришли результат ./mvnw verify и покажи, что старые 21 тест не сломались.
++
++
