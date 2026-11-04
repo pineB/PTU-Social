@@ -1,5 +1,6 @@
 package com.ptu.backend.config;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.List;
 
@@ -15,7 +16,8 @@ public record AppProperties(
 		Verification verification,
 		Jwt jwt,
 		Seed seed,
-		RateLimit rateLimit) {
+		RateLimit rateLimit,
+		Reviews reviews) {
 
 	public record Cors(List<String> allowedOrigins) {
 	}
@@ -44,5 +46,8 @@ public record AppProperties(
 	}
 
 	public record Limit(int requests, Duration window) {
+	}
+
+	public record Reviews(BigDecimal rewardAmount, int monthlyLimit) {
 	}
 }

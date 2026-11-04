@@ -199,3 +199,170 @@
 +Обязательно проверь, что разные X-Forwarded-For не обходят лимит (как ты и написал).
 +
 +После проверки обнови docs/agent-log.md.
+
+# 2026-11-04T09:45:09.352Z
++Контекст: Мы переходим к модулю финансов и фоновых задач. Ниже я привожу код сущностей от моего коллеги (Activity, Review, TeacherBudget), которые он скоро добавит в проект. Ознакомься с ними.
++
++⚠️ КРИТИЧЕСКИ ВАЖНО: Коллега использовал тип Long для идентификаторов пользователей (teacherId, authorId, moderatedBy). Но в нашей базе users.id — это UUID. Когда будешь писать код и миграции, используй UUID для всех внешних ключей на пользователей. В своих будущих классах ты можешь сразу писать UUID.
++
++Код сущностей:
++
++java
++// Activity.java
++package com.ptu.backend.domain;
++import jakarta.persistence.*;
++import lombok.Getter;
++import lombok.NoArgsConstructor;
++import lombok.Setter;
++import java.math.BigDecimal;
++import java.time.LocalDateTime;
++
++@Entity
++@Table(name = "activities")
++@Getter
++@Setter
++@NoArgsConstructor
++public class Activity {
++    @Id
++    @GeneratedValue(strategy = GenerationType.IDENTITY)
++    private Long id;
++    @Column(nullable = false, length = 150)
++    private String title;
++    @Enumerated(EnumType.STRING)
++    @Column(nullable = false, length = 30)
++    private ActivityType type;
++    @Enumerated(EnumType.STRING)
++    @Column(nullable = false, length = 30)
++    private ParticipationMode participationMode;
++    @Column(nullable = false)
++    private LocalDateTime startsAt;
++    @Column(nullable = false)
++    private LocalDateTime endsAt;
++    @Column(name = "required_activation_percent", nullable = false)
++    private Integer requiredActivationPercent;
++    @Column(name = "reward_boa", precision = 5, scale = 2, nullable = false)
++    private BigDecimal rewardBoa = BigDecimal.ZERO;
++    @Column(name = "reward_bua", precision = 5, scale = 2, nullable = false)
++    private BigDecimal rewardBua = BigDecimal.ZERO;
++    @Column(name = "teacher_id", nullable = false)
++    private Long teacherId; // TODO: fix to UUID
++    @Column(nullable = false)
++    private Boolean active = true;
++    @Column(name = "created_at", nullable = false, updatable = false)
++    private LocalDateTime createdAt;
++    @PrePersist
++    public void onCreate() { if (createdAt == null) createdAt = LocalDateTime.now(); }
++}
++
++// Review.java
++package com.ptu.backend.domain;
++import jakarta.persistence.*;
++import lombok.Getter;
++import lombok.NoArgsConstructor;
++import lombok.Setter;
++import java.time.LocalDateTime;
++
++@Entity
++@Table(name = "reviews", indexes = {
++    @Index(name = "idx_review_activity", columnList = "activity_id"),
++    @Index(name = "idx_review_author", columnList = "author_id"),
++    @Index(name = "idx_review_status", columnList = "status")
++})
++@Getter @Setter @NoArgsConstructor
++public class Review {
++    @Id
++    @GeneratedValue(strategy = GenerationType.IDENTITY)
++    private Long id;
++    @Column(name = "activity_id", nullable = false)
++    private Long activityId;
++    @Column(name = "author_id", nullable = false)
++    private Long authorId; // TODO: fix to UUID
++    @Column(nullable = false, length = 2000)
++    private String text;
++    @Column(name = "rating", nullable = false)
++    private Integer rating;
++    @Enumerated(EnumType.STRING)
++    @Column(nullable = false, length = 30)
++    private ReviewStatus status = ReviewStatus.PENDING_MODERATION;
++    @Column(name = "moderated_by")
++    private Long moderatedBy; // TODO: fix to UUID
++    @Column(name = "reward_awarded", nullable = false)
++    private boolean rewardAwarded = false;
++    @Column(name = "created_at", nullable = false, updatable = false)
++    private LocalDateTime createdAt;
++    @Column(name = "updated_at", nullable = false)
++    private LocalDateTime updatedAt;
++    @PrePersist
++    public void onCreate() { LocalDateTime now = LocalDateTime.now(); this.createdAt = now; this.updatedAt = now; }
++    @PreUpdate
++    public void onUpdate() { this.updatedAt = LocalDateTime.now(); }
++}
++
++// TeacherBudget.java
++package com.ptu.backend.domain;
++import jakarta.persistence.*;
++import lombok.Getter;
++import lombok.NoArgsConstructor;
++import lombok.Setter;
++import java.math.BigDecimal;
++import java.time.LocalDateTime;
++
++@Entity
++@Table(name = "teacher_budgets", indexes = {@Index(name = "idx_teacher_budget_teacher", columnList = "teacher_id", unique = true)})
++@Getter @Setter @NoArgsConstructor
++public class TeacherBudget {
++    @Id
++    @GeneratedValue(strategy = GenerationType.IDENTITY)
++    private Long id;
++    @Column(name = "teacher_id", nullable = false, unique = true)
++    private Long teacherId; // TODO: fix to UUID
++    @Column(name = "total_budget", precision = 19, scale = 2, nullable = false)
++    private BigDecimal totalBudget = BigDecimal.ZERO;
++    @Column(name = "spent_budget", precision = 19, scale = 2, nullable = false)
++    private BigDecimal spentBudget = BigDecimal.ZERO;
++    @Column(name = "created_at", nullable = false, updatable = false)
++    private LocalDateTime createdAt;
++    @Column(name = "updated_at", nullable = false)
++    private LocalDateTime updatedAt;
++    @PrePersist
++    public void onCreate() { LocalDateTime now = LocalDateTime.now(); this.createdAt = now; this.updatedAt = now; }
++    @PreUpdate
++    public void onUpdate() { this.updatedAt = LocalDateTime.now(); }
++    public BigDecimal getAvailableBudget() { return totalBudget.subtract(spentBudget); }
++}
++Твои задачи:
++
++БД (Flyway V4): Создай миграцию V4__wallets_and_transactions.sql. Таблица wallets (id UUID, user_id UUID UNIQUE FK на users, currency_balance numeric, created_at, updated_at). Таблица transactions (id UUID, wallet_id UUID FK, amount numeric, type varchar, idempotency_key varchar UNIQUE, created_at).
++
++Сервис WalletService: Создай сущности Wallet и Transaction. Реализуй метод credit(UUID userId, BigDecimal amount, String type, String idempotencyKey) с проверкой idempotency_key на дубли.
++
++Планировщик (Scheduler):
++
++Включи @EnableScheduling.
++
++Создай ScheduledTasks с методом @Scheduled(cron = "0 0 * * * *") processApprovedReviews(). Он должен находить в таблице Review отзывы со статусом APPROVED и rewardAwarded = false, начислять валюту автору через WalletService, ставить rewardAwarded = true. Важно: нужно учесть лимит «не более 5 отзывов в месяц на пользователя» (проверяй по дате создания транзакций или по дате отзывов).
++
++Создай заглушку @Scheduled(cron = "0 0 1 1 * *") processMonthlyConversion() с логированием.
++
++Тесты:
++
++Тест на idempotency_key (дважды вызываем credit с одним ключом — баланс меняется один раз).
++
++Тест на планировщик: создаем одобренный отзыв, запускаем метод, проверяем, что баланс вырос, а флаг стал true.
++
++Ограничения: Не трогай файлы коллеги, если их нет в проекте. Просто создай свои классы так, чтобы они работали с его таблицами. Сначала предложи план.
+
+# 2026-11-04T09:47:01.304Z
++y/A. План отличный. Особенно респект за JdbcTemplate вместо дублирования сущности Review и за пессимистичную блокировку (FOR UPDATE).
++
++Делаем Вариант А (ничего за коллегу не мигрируем). Тестовый стаб reviews-stub.sql — отличная идея для изоляции тестов.
++
++Дополнительно: в этом же этапе добавь задачу на "просрочки" (overdue), которую мы обсуждали:
++
++В ScheduledTasks добавь метод @Scheduled(cron = "0 0 * * * *") processOverdueTasks().
++
++Внутри (через JdbcTemplate или существующие репозитории): найди teacher_invites, у которых expires_at < now() и статус PENDING, и поменяй им статус на EXPIRED.
++
++Напиши на это простой тест.
++
++Приступай, сначала напиши код, потом покажи результаты ./mvnw verify.

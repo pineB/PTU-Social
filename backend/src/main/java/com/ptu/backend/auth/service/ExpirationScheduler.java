@@ -5,10 +5,7 @@ import java.util.List;
 
 import com.ptu.backend.auth.domain.RegistrationRequest;
 import com.ptu.backend.auth.domain.RegistrationStatus;
-import com.ptu.backend.auth.domain.TeacherInvite;
-import com.ptu.backend.auth.domain.TeacherInviteStatus;
 import com.ptu.backend.auth.repo.RegistrationRequestRepository;
-import com.ptu.backend.auth.repo.TeacherInviteRepository;
 
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -21,13 +18,10 @@ import lombok.extern.slf4j.Slf4j;
 public class ExpirationScheduler {
 
 	private final RegistrationRequestRepository requests;
-	private final TeacherInviteRepository invites;
 	private final EmailVerificationService emailVerification;
 
-	public ExpirationScheduler(RegistrationRequestRepository requests, TeacherInviteRepository invites,
-			EmailVerificationService emailVerification) {
+	public ExpirationScheduler(RegistrationRequestRepository requests, EmailVerificationService emailVerification) {
 		this.requests = requests;
-		this.invites = invites;
 		this.emailVerification = emailVerification;
 	}
 
@@ -47,12 +41,5 @@ public class ExpirationScheduler {
 			log.info("Expired {} registration requests", expiredRequests.size());
 		}
 
-		List<TeacherInvite> expiredInvites = invites.findByStatusAndExpiresAtBefore(TeacherInviteStatus.PENDING, now);
-		for (TeacherInvite invite : expiredInvites) {
-			invite.setStatus(TeacherInviteStatus.EXPIRED);
-		}
-		if (!expiredInvites.isEmpty()) {
-			log.info("Expired {} teacher invites", expiredInvites.size());
-		}
 	}
 }
