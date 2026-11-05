@@ -15,7 +15,6 @@ public record AppProperties(
 		Invite invite,
 		Verification verification,
 		Jwt jwt,
-		Seed seed,
 		RateLimit rateLimit,
 		Reviews reviews) {
 
@@ -37,9 +36,6 @@ public record AppProperties(
 	}
 
 	public record Jwt(String secret, Duration ttl) {
-	}
-
-	public record Seed(String officeEmail, String officePassword) {
 	}
 
 	public record RateLimit(boolean enabled, Limit login, Limit authenticated, Limit anonymous) {

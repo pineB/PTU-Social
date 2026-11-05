@@ -6,6 +6,22 @@ const apiClient = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+apiClient.interceptors.request.use((config) => {
+  const stored = window.sessionStorage.getItem('ptu-social-auth-session');
+  if (!stored) return config;
+
+  try {
+    const session: unknown = JSON.parse(stored);
+    if (typeof session === 'object' && session !== null && 'accessToken' in session
+      && typeof session.accessToken === 'string' && 'tokenType' in session && session.tokenType === 'Bearer') {
+      config.headers.Authorization = `Bearer ${session.accessToken}`;
+    }
+  } catch {
+    window.sessionStorage.removeItem('ptu-social-auth-session');
+  }
+  return config;
+});
+
 function getRateLimitMessage(error: AxiosError): string {
   const retryAfter = error.response?.headers['retry-after'];
 
@@ -20,17 +36,23 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     const status = error.response?.status;
+    const apiMessage = (error.response?.data as { message?: unknown } | undefined)?.message;
+    const message = typeof apiMessage === 'string' ? apiMessage : undefined;
     const messages: Partial<Record<number, string>> = {
       401: 'Сессия истекла. Войдите в систему снова.',
       403: 'У вас недостаточно прав для этого действия.',
       429: getRateLimitMessage(error),
     };
-    const message = status ? messages[status] : undefined;
+    const errorMessage = message ?? (status ? messages[status] : undefined);
 
-    if (message && (status === 401 || status === 403 || status === 429)) {
+    if (errorMessage && (status === 401 || status === 403 || status === 429)) {
+      if (status === 401 && window.sessionStorage.getItem('ptu-social-auth-session')) {
+        window.sessionStorage.removeItem('ptu-social-auth-session');
+        window.dispatchEvent(new Event('app:auth-expired'));
+      }
       window.dispatchEvent(
         new CustomEvent('app:http-error', {
-          detail: { status, message },
+          detail: { status, message: errorMessage },
         }),
       );
     }

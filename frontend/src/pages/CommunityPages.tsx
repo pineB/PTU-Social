@@ -1,13 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   Avatar,
+  Alert,
   Box,
   Button,
   Card,
   CardActionArea,
   CardContent,
+  CircularProgress,
   Chip,
   FormControl,
   InputLabel,
@@ -23,14 +25,12 @@ import EmojiEventsRoundedIcon from '@mui/icons-material/EmojiEventsRounded';
 import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded';
 import AssignmentTurnedInRoundedIcon from '@mui/icons-material/AssignmentTurnedInRounded';
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
-import { useCampusWorkflow } from '../data/campus-workflow';
 import {
-  communityStudents,
-  initialCommunityAwards,
   type CommunityAward,
   type CommunityMetric,
   type CommunityStudent,
 } from '../data/community';
+import { listCommunityAwards, listCommunityStudents } from '../api/community';
 
 const metricLabels: Record<CommunityMetric, string> = {
   АР: 'Академический рейтинг',
@@ -111,37 +111,33 @@ function FilterSelect({ label, value, options, onChange }: {
   );
 }
 
-function studentsWithLiveScores(scores: { academicRating: number; boaPoints: number; buaPoints: number }) {
-  return communityStudents.map((student) => student.id === 'student-alexandra'
-    ? { ...student, ...scores }
-    : student);
-}
-
 export function AwardsFeedPage() {
-  const { activityAwards } = useCampusWorkflow();
+  const [students, setStudents] = useState<CommunityStudent[]>([]);
+  const [awards, setAwards] = useState<CommunityAward[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [metric, setMetric] = useState<'Все' | CommunityMetric>('Все');
   const [group, setGroup] = useState('Все группы');
-  const awards = useMemo(() => {
-    const liveAwards: CommunityAward[] = activityAwards.map((award, index) => {
-      const student = communityStudents.find((item) => item.name === award.studentName);
-      return {
-        id: award.id || `live-award-${index}`,
-        studentId: student?.id,
-        studentName: award.studentName,
-        group: award.group,
-        title: award.eventTitle,
-        detail: `Активность ${award.activityPercent}% · ${award.awardedBy}`,
-        metric: award.activityType,
-        points: award.points,
-        createdAt: award.createdAt,
-      };
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    void Promise.all([listCommunityStudents(), listCommunityAwards()]).then(([studentItems, awardItems]) => {
+      if (!active) return;
+      setStudents(studentItems);
+      setAwards(awardItems);
+    }).catch((loadError: unknown) => {
+      if (active) setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить ленту наград.');
+    }).finally(() => {
+      if (active) setLoading(false);
     });
-    return [...liveAwards, ...initialCommunityAwards]
-      .filter((award) => metric === 'Все' || award.metric === metric)
-      .filter((award) => group === 'Все группы' || award.group === group)
-      .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
-  }, [activityAwards, group, metric]);
-  const groups = ['Все группы', ...new Set(communityStudents.map((student) => student.group))];
+    return () => { active = false; };
+  }, []);
+  const visibleAwards = useMemo(() => awards
+    .filter((award) => metric === 'Все' || award.metric === metric)
+    .filter((award) => group === 'Все группы' || award.group === group)
+    .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
+  [awards, group, metric]);
+  const groups = ['Все группы', ...new Set(students.map((student) => student.group))];
 
   return (
     <Box className="community-page">
@@ -150,10 +146,11 @@ export function AwardsFeedPage() {
         <MetricPicker value={metric} onChange={setMetric} />
         <FilterSelect label="Группа" value={group} options={groups} onChange={setGroup} />
       </Box>
-      {awards.length > 0 ? (
+      {error && <Alert severity="error">{error}</Alert>}
+      {loading ? <CircularProgress /> : visibleAwards.length > 0 ? (
         <Box className="awards-feed">
-          {awards.map((award) => {
-            const student = communityStudents.find((item) => item.id === award.studentId);
+          {visibleAwards.map((award) => {
+            const student = students.find((item) => item.id === award.studentId);
             const MetricIcon = metricIcons[award.metric];
             const content = (
               <CardContent className="award-feed-content">
@@ -190,17 +187,26 @@ export function AwardsFeedPage() {
 }
 
 export function LeaderboardPage() {
-  const { academicRating, boaPoints, buaPoints } = useCampusWorkflow();
+  const [students, setStudents] = useState<CommunityStudent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [metric, setMetric] = useState<CommunityMetric>('АР');
   const [group, setGroup] = useState('Все группы');
-  const [course, setCourse] = useState('Все курсы');
-  const students = useMemo(() => studentsWithLiveScores({ academicRating, boaPoints, buaPoints }), [academicRating, boaPoints, buaPoints]);
+  useEffect(() => {
+    let active = true;
+    void listCommunityStudents().then((items) => {
+      if (active) setStudents(items);
+    }).catch((loadError: unknown) => {
+      if (active) setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить рейтинг.');
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
   const groups = ['Все группы', ...new Set(students.map((student) => student.group))];
-  const courses = ['Все курсы', ...new Set(students.map((student) => `${student.course} курс`))];
   const leaders = useMemo(() => students
     .filter((student) => group === 'Все группы' || student.group === group)
-    .filter((student) => course === 'Все курсы' || `${student.course} курс` === course)
-    .sort((left, right) => metricValue(right, metric) - metricValue(left, metric)), [course, group, metric, students]);
+    .sort((left, right) => metricValue(right, metric) - metricValue(left, metric)), [group, metric, students]);
 
   return (
     <Box className="community-page">
@@ -210,10 +216,10 @@ export function LeaderboardPage() {
           <Box className="leaderboard-toolbar">
             <MetricPicker value={metric} onChange={(next) => { if (next !== 'Все') setMetric(next); }} />
             <FilterSelect label="Группа" value={group} options={groups} onChange={setGroup} />
-            <FilterSelect label="Курс" value={course} options={courses} onChange={setCourse} />
           </Box>
+          {error && <Alert severity="error">{error}</Alert>}
           <Box className="leaderboard-list" role="list" aria-label={`Рейтинг по показателю ${metric}`}>
-            {leaders.map((student, index) => {
+            {loading ? <CircularProgress /> : leaders.map((student, index) => {
               const MetricIcon = metricIcons[metric];
               return (
                 <StudentLink student={student} key={student.id}>
@@ -222,7 +228,7 @@ export function LeaderboardPage() {
                     <Avatar className="leaderboard-avatar">{initials(student.name)}</Avatar>
                     <Box className="leaderboard-student">
                       <Typography fontWeight={750}>{student.name}</Typography>
-                      <Typography variant="caption" color="text.secondary">{student.group} · {student.course} курс</Typography>
+                      <Typography variant="caption" color="text.secondary">{student.group}</Typography>
                     </Box>
                     <Box className="leaderboard-score"><MetricIcon fontSize="small" /><Typography fontWeight={800}>{metricValue(student, metric)} <span>{metric}</span></Typography></Box>
                   </Box>
@@ -239,27 +245,33 @@ export function LeaderboardPage() {
 
 export function PublicStudentProfilePage() {
   const { studentId } = useParams<{ studentId: string }>();
-  const { academicRating, boaPoints, buaPoints, activityAwards } = useCampusWorkflow();
-  const students = studentsWithLiveScores({ academicRating, boaPoints, buaPoints });
+  const [students, setStudents] = useState<CommunityStudent[]>([]);
+  const [awardsData, setAwardsData] = useState<CommunityAward[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    void Promise.all([listCommunityStudents(), listCommunityAwards()]).then(([studentItems, awardItems]) => {
+      if (!active) return;
+      setStudents(studentItems);
+      setAwardsData(awardItems);
+    }).catch((loadError: unknown) => {
+      if (active) setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить профиль.');
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
   const student = students.find((item) => item.id === studentId);
-  const awards = [
-    ...activityAwards.filter((award) => award.studentName === student?.name).map((award) => ({
-      id: award.id,
-      title: award.eventTitle,
-      detail: `+${award.points} ${award.activityType} · активность ${award.activityPercent}%`,
-      createdAt: award.createdAt,
-    })),
-    ...initialCommunityAwards.filter((award) => award.studentId === studentId).map((award) => ({
-      id: award.id,
-      title: award.title,
-      detail: `+${award.points} ${award.metric} · ${award.detail}`,
-      createdAt: award.createdAt,
-    })),
-  ].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()).slice(0, 5);
+  const awards = awardsData.filter((award) => award.studentId === studentId)
+    .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
+    .slice(0, 5);
 
+  if (loading) return <Box className="community-page"><CircularProgress /></Box>;
   if (!student) {
     return (
       <Box className="community-page">
+        {error && <Alert severity="error">{error}</Alert>}
         <Card className="community-empty-state">
           <CardContent>
             <Typography variant="h5" mb={1}>Профиль не найден</Typography>
@@ -284,9 +296,9 @@ export function PublicStudentProfilePage() {
           <Avatar className="public-profile-avatar">{initials(student.name)}</Avatar>
           <Box className="public-profile-copy">
             <Typography variant="h4">{student.name}</Typography>
-            <Typography color="text.secondary">{student.group} · {student.course} курс</Typography>
+            <Typography color="text.secondary">{student.group}</Typography>
           </Box>
-          <Chip label={`В группе с ${new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(new Date(student.joinedAt))}`} className="profile-role-chip" />
+          <Chip label={`В сообществе с ${new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(new Date(student.joinedAt))}`} className="profile-role-chip" />
         </CardContent>
       </Card>
       <Box className="public-profile-metrics">
@@ -304,14 +316,6 @@ export function PublicStudentProfilePage() {
           );
         })}
       </Box>
-      <Card className="public-profile-interests">
-        <CardContent>
-          <Typography variant="h6">Интересы</Typography>
-          <Stack direction="row" gap={1} flexWrap="wrap" mt={1.5}>
-            {student.interests.map((interest) => <Chip key={interest} label={interest} className="subtle-chip" />)}
-          </Stack>
-        </CardContent>
-      </Card>
       <Card className="public-profile-awards">
         <CardContent>
           <Stack direction="row" spacing={1} alignItems="center" mb={1.5}>

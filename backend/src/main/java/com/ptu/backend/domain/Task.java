@@ -17,7 +17,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "tasks")
+@Table(name = "legacy_tasks")
 @Getter
 @Setter
 @NoArgsConstructor

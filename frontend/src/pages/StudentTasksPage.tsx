@@ -15,6 +15,7 @@ import {
 import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
 import AttachFileRoundedIcon from '@mui/icons-material/AttachFileRounded';
 import CloudUploadRoundedIcon from '@mui/icons-material/CloudUploadRounded';
+import { downloadWorkspaceAttachment } from '../api/workspace';
 import { useTaskWorkflow, type Assignment, type AssignmentStatus } from '../data/task-workflow';
 
 const statusLabels: Record<AssignmentStatus, string> = {
@@ -61,7 +62,7 @@ function AssignmentSubmissionForm({ assignment, onClose }: { assignment: Assignm
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submissionLock.current || isLoading) return;
-    if (!workText.trim() && !file && !assignment.fileName) {
+    if (!workText.trim() && !file) {
       setError('Добавьте комментарий к работе или прикрепите файл.');
       return;
     }
@@ -70,7 +71,7 @@ function AssignmentSubmissionForm({ assignment, onClose }: { assignment: Assignm
     setIsLoading(true);
     setError('');
     try {
-      await submitAssignment(assignment.id, workText.trim(), file?.name ?? assignment.fileName);
+      await submitAssignment(assignment.id, workText.trim(), file ?? undefined);
       onClose();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Не удалось отправить работу.');
@@ -86,9 +87,6 @@ function AssignmentSubmissionForm({ assignment, onClose }: { assignment: Assignm
         {assignment.status === 'in_progress' && (assignment.teacherComment ?? assignment.returnComment) && (
           <Alert severity="warning">
             <strong>Комментарий преподавателя:</strong> {assignment.teacherComment ?? assignment.returnComment}
-            {assignment.feedbackFileName && (
-              <Box><Chip size="small" icon={<AttachFileRoundedIcon />} label={assignment.feedbackFileName} className="attached-file-chip" /></Box>
-            )}
           </Alert>
         )}
         {assignment.status === 'overdue' && (
@@ -110,7 +108,7 @@ function AssignmentSubmissionForm({ assignment, onClose }: { assignment: Assignm
           disabled={isLoading}
           className="assignment-file-button"
         >
-          {file?.name ?? assignment.fileName ?? 'Прикрепить файл'}
+          {file?.name ?? 'Прикрепить файл'}
           <input
             type="file"
             hidden
@@ -172,9 +170,6 @@ function AssignmentCard({ assignment }: { assignment: Assignment }) {
         {feedback && assignment.status === 'accepted' && (
           <Alert severity="success" className="assignment-feedback">
             <strong>Комментарий преподавателя:</strong> {feedback}
-            {assignment.feedbackFileName && (
-              <Box><Chip size="small" icon={<AttachFileRoundedIcon />} label={assignment.feedbackFileName} className="attached-file-chip" /></Box>
-            )}
           </Alert>
         )}
 
@@ -182,7 +177,15 @@ function AssignmentCard({ assignment }: { assignment: Assignment }) {
           <Box className="submitted-work-preview">
             <Typography variant="overline" color="text.secondary">Моя работа</Typography>
             {assignment.workText && <Typography variant="body2" mt={0.5}>{assignment.workText}</Typography>}
-            {assignment.fileName && <Chip size="small" icon={<AttachFileRoundedIcon />} label={assignment.fileName} className="attached-file-chip" />}
+            {assignment.fileName && (
+              <Chip
+                size="small"
+                icon={<AttachFileRoundedIcon />}
+                label={assignment.fileName}
+                onClick={() => assignment.attachmentUrl && void downloadWorkspaceAttachment(assignment.attachmentUrl, assignment.fileName ?? 'work')}
+                className="attached-file-chip"
+              />
+            )}
           </Box>
         )}
 
@@ -199,7 +202,7 @@ function AssignmentCard({ assignment }: { assignment: Assignment }) {
 }
 
 export default function StudentTasksPage() {
-  const { assignments } = useTaskWorkflow();
+  const { assignments, isLoading, error } = useTaskWorkflow();
   const [filter, setFilter] = useState<'all' | AssignmentStatus>('all');
   const visibleAssignments = filter === 'all' ? assignments : assignments.filter((item) => item.status === filter);
   const filters: { value: 'all' | AssignmentStatus; label: string }[] = [
@@ -229,6 +232,8 @@ export default function StudentTasksPage() {
           </Button>
         ))}
       </Stack>
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {isLoading && <CircularProgress size={28} aria-label="Загрузка заданий" />}
       <Box className="assignment-list">
         {visibleAssignments.map((assignment) => <AssignmentCard key={assignment.id} assignment={assignment} />)}
         {visibleAssignments.length === 0 && <Alert severity="info">В этой категории пока нет заданий.</Alert>}

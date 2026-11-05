@@ -1,0 +1,4 @@
+ALTER TABLE student_profiles
+    ADD COLUMN academic_rating INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN boa_points INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN bua_points INTEGER NOT NULL DEFAULT 0;

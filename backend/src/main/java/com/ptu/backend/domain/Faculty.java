@@ -15,7 +15,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "faculties")
+@Table(name = "legacy_faculties")
 @Getter
 @Setter
 @NoArgsConstructor

@@ -14,10 +14,12 @@ public record CertificateRequestView(
 		CertificateType type,
 		CertificateStatus status,
 		String rejectionReason,
+		String documentName,
+		boolean documentAvailable,
 		Instant createdAt,
 		Instant updatedAt) {
 
-	public static CertificateRequestView from(CertificateRequest request) {
+	public static CertificateRequestView from(CertificateRequest request, String documentName) {
 		return new CertificateRequestView(
 				request.getId(),
 				request.getStudent().getId(),
@@ -25,6 +27,8 @@ public record CertificateRequestView(
 				request.getType(),
 				request.getStatus(),
 				request.getRejectionReason(),
+				documentName,
+				documentName != null,
 				request.getCreatedAt(),
 				request.getUpdatedAt());
 	}

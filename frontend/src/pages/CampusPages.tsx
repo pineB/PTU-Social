@@ -9,6 +9,10 @@ import {
   Chip,
   CircularProgress,
   Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   LinearProgress,
   MenuItem,
   Stack,
@@ -28,7 +32,21 @@ import ScheduleRoundedIcon from '@mui/icons-material/ScheduleRounded';
 import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
 import PersonAddAltRoundedIcon from '@mui/icons-material/PersonAddAltRounded';
 import { Link, useLocation } from 'react-router-dom';
-import { campusGroups, campusCaseRewards, caseOpeningPrice, chooseCampusCaseReward, useCampusWorkflow, type CampusEvent, type CertificateRequest, type InventoryItem, type PassReward, type ScheduleEntry } from '../data/campus-workflow';
+import { useCampusWorkflow, type CampusEvent, type InventoryItem, type PassReward, type ScheduleEntry } from '../data/campus-workflow';
+import { createCertificateRequest, downloadCertificateDocument, listCertificates, listMyCertificates, updateCertificateRequestStatus, uploadCertificateDocument, type CertificateRequestView, type CertificateStatus, type CertificateType } from '../api/certificates';
+import { useAuth } from '../auth/AuthProvider';
+
+const certificateTypeLabels: Record<CertificateType, string> = {
+  EDUCATION: 'Справка об обучении',
+  INCOME: 'Справка о доходах',
+  MILITARY: 'Справка для военкомата',
+};
+
+const certificateStatusLabels: Record<CertificateStatus, string> = {
+  PENDING: 'Подана',
+  APPROVED: 'Одобрена',
+  REJECTED: 'Отклонена',
+};
 
 function PageHeader({ title, children }: { title: string; children?: ReactNode }) {
   return (
@@ -74,9 +92,9 @@ function formatNounCount(count: number, one: string, few: string, many: string):
   return `${count} ${noun}`;
 }
 
-function canStudentReview(event: CampusEvent): boolean {
-  if (Date.parse(event.endsAt) > Date.now() || event.reviews.some((review) => review.studentName === 'Александра Ким')) return false;
-  const participant = event.participants.find((item) => item.studentName === 'Александра Ким' && item.participationConfirmed);
+function canStudentReview(event: CampusEvent, studentId: string, studentName: string): boolean {
+  if ((!studentId && !studentName) || Date.parse(event.endsAt) > Date.now() || event.reviews.some((review) => review.studentId === studentId || review.studentName === studentName)) return false;
+  const participant = event.participants.find((item) => item.studentId === studentId || item.studentName === studentName);
   if (!participant) return false;
   if (event.format === 'individual') return true;
   const registration = event.groupRegistrations.find((item) => item.id === participant.groupRegistrationId);
@@ -86,11 +104,14 @@ function canStudentReview(event: CampusEvent): boolean {
 }
 
 function EventCard({ eventId, reviewExpanded = false }: { eventId: string; reviewExpanded?: boolean }) {
-  const { events, joinEvent, addEventGroup, confirmGroupParticipation, isGroupLeader, submitEventReview } = useCampusWorkflow();
+  const { events, joinEvent, confirmGroupParticipation, submitEventReview } = useCampusWorkflow();
+  const { currentUser } = useAuth();
+  const studentId = currentUser?.id ?? '';
+  const studentName = currentUser?.fullName ?? '';
+  const studentGroup = currentUser?.groupName ?? '';
   const event = events.find((item) => item.id === eventId);
   const selectedEventId = event?.id;
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [reviewComment, setReviewComment] = useState('');
   const [reviewRating, setReviewRating] = useState('5');
@@ -116,22 +137,7 @@ function EventCard({ eventId, reviewExpanded = false }: { eventId: string; revie
     }
   }
 
-  async function handleAddGroup(group: string, groupSize: number) {
-    if (actionLock.current || isLoading || !selectedEventId) return;
-    actionLock.current = true;
-    setIsLoading(true);
-    setError('');
-    try {
-      await addEventGroup(selectedEventId, group, groupSize, 'Александра Ким · староста');
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Не удалось добавить группу.');
-    } finally {
-      actionLock.current = false;
-      setIsLoading(false);
-    }
-  }
-
-  const currentStudentParticipant = event.participants.find((participant) => participant.studentName === 'Александра Ким');
+  const currentStudentParticipant = event.participants.find((participant) => participant.studentId === studentId || participant.studentName === studentName);
   const currentStudentEnrolled = currentStudentParticipant !== undefined;
   const currentStudentRegistration = event.groupRegistrations.find((registration) => registration.id === currentStudentParticipant?.groupRegistrationId);
   const currentGroupParticipationCount = currentStudentRegistration
@@ -144,7 +150,7 @@ function EventCard({ eventId, reviewExpanded = false }: { eventId: string; revie
     currentStudentParticipant?.participationConfirmed &&
     (event.format === 'individual' || (currentStudentRegistration && currentGroupParticipationCount >= currentGroupParticipationRequired)),
   );
-  const currentStudentReview = event.reviews.find((review) => review.studentName === 'Александра Ким');
+  const currentStudentReview = event.reviews.find((review) => review.studentId === studentId || review.studentName === studentName);
 
   async function handleSubmitReview(formEvent: FormEvent<HTMLFormElement>) {
     formEvent.preventDefault();
@@ -202,25 +208,20 @@ function EventCard({ eventId, reviewExpanded = false }: { eventId: string; revie
         )}
         {event.format === 'group' && Date.parse(event.date) > Date.now() && (
         <Box className="event-group-list">
-          {isGroupLeader && !event.groupRegistrations.some((registration) => registration.group === 'ИС-24') && (
-            <Button className="campus-event-action" variant="outlined" disabled={isLoading} onClick={() => void handleAddGroup('ИС-24', 24)}>
-              {isLoading ? <CircularProgress size={18} /> : 'Записать группу ИС-24'}
-            </Button>
-          )}
           {event.groupRegistrations.map((registration) => {
             const joined = event.participants.filter((participant) => participant.groupRegistrationId === registration.id && participant.participationConfirmed).length;
             const needed = Math.ceil(registration.groupSize * (event.groupMinPercent ?? 0) / 100);
             const thresholdReached = joined >= needed;
-            const memberJoined = event.participants.some((participant) => participant.groupRegistrationId === registration.id && participant.studentName === 'Александра Ким');
+            const memberJoined = event.participants.some((participant) => participant.groupRegistrationId === registration.id && participant.studentName === studentName);
             return (
               <Box className="event-group-registration" key={registration.id}>
                 <Typography variant="body2" fontWeight={650}>{registration.group} · {joined} из {registration.groupSize} подтвердили участие</Typography>
                 <Typography variant="caption" color="text.secondary">Порог: {formatNounCount(needed, 'участник', 'участника', 'участников')} · {thresholdReached ? 'группа допущена' : 'пока не набран'}</Typography>
-                {!memberJoined && registration.group === 'ИС-24' && (
+                {!memberJoined && registration.group === studentGroup && (
                   <Box className="event-confirm-action">
                     <Typography variant="caption" color="text.secondary">Ваш ответ влияет на допуск всей группы к мероприятию</Typography>
-                    <Button variant="contained" disabled={isLoading} onClick={() => { setSelectedGroupId(registration.id); void handleJoin(registration.id); }}>
-                      {isLoading && selectedGroupId === registration.id ? <CircularProgress size={18} color="inherit" /> : 'Я участвую'}
+                    <Button variant="contained" disabled={isLoading} onClick={() => void handleJoin(registration.id)}>
+                      {isLoading ? <CircularProgress size={18} color="inherit" /> : 'Я участвую'}
                     </Button>
                   </Box>
                 )}
@@ -273,15 +274,20 @@ function EventCard({ eventId, reviewExpanded = false }: { eventId: string; revie
 }
 
 export function EventsPage() {
-  const { events } = useCampusWorkflow();
+  const { events, error, isLoading } = useCampusWorkflow();
+  const { currentUser } = useAuth();
+  const studentId = currentUser?.id ?? '';
+  const studentName = currentUser?.fullName ?? '';
   const [reviewMode, setReviewMode] = useState(false);
-  const pendingReviewEvents = events.filter(canStudentReview);
+  const pendingReviewEvents = events.filter((event) => canStudentReview(event, studentId, studentName));
   const visibleEvents = reviewMode ? pendingReviewEvents : events;
   return (
     <Box className="campus-page">
       <PageHeader title="Мероприятия">
-        <Typography color="text.secondary">{formatNounCount(events.filter((event) => event.participants.some((participant) => participant.studentName === 'Александра Ким')).length, 'мероприятие', 'мероприятия', 'мероприятий')} в вашем списке</Typography>
+        <Typography color="text.secondary">{formatNounCount(events.filter((event) => event.participants.some((participant) => participant.studentId === studentId || participant.studentName === studentName)).length, 'мероприятие', 'мероприятия', 'мероприятий')} в вашем списке</Typography>
       </PageHeader>
+      {error && <Alert severity="error">{error}</Alert>}
+      {!isLoading && !error && events.length === 0 && <Alert severity="info">Активных мероприятий пока нет.</Alert>}
       {pendingReviewEvents.length > 0 && (
         <Button
           variant={reviewMode ? 'contained' : 'outlined'}
@@ -295,7 +301,7 @@ export function EventsPage() {
       {reviewMode && pendingReviewEvents.length === 0 && <Alert severity="info">Мероприятий, ожидающих отзыва, нет.</Alert>}
       <Box className="campus-event-list">
         {visibleEvents.map((event) => (
-          <EventCard key={event.id} eventId={event.id} reviewExpanded={reviewMode && canStudentReview(event)} />
+          <EventCard key={event.id} eventId={event.id} reviewExpanded={reviewMode && canStudentReview(event, studentId, studentName)} />
         ))}
         {visibleEvents.length === 0 && reviewMode && <Typography color="text.secondary">Нет мероприятий для отображения.</Typography>}
       </Box>
@@ -304,11 +310,20 @@ export function EventsPage() {
 }
 
 export function GroupConfirmationPage() {
-  const { groupConfirmations, decideGroupConfirmation, isGroupLeader } = useCampusWorkflow();
+  const {
+    groupConfirmations,
+    myGroupConfirmation,
+    decideGroupConfirmation,
+    requestGroupConfirmation,
+    isGroupLeader,
+    error: workflowError,
+  } = useCampusWorkflow();
+  const { currentUser } = useAuth();
+  const ownGroup = currentUser?.groupName ?? '';
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const actionLock = useRef(false);
-  const ownGroupConfirmations = groupConfirmations.filter((item) => item.group === 'ИС-24');
+  const ownGroupConfirmations = groupConfirmations.filter((item) => item.group === ownGroup);
   const pending = ownGroupConfirmations.filter((item) => item.status === 'pending');
   const processed = ownGroupConfirmations.filter((item) => item.status !== 'pending');
 
@@ -318,7 +333,7 @@ export function GroupConfirmationPage() {
     setBusyId(id);
     setError('');
     try {
-      await decideGroupConfirmation(id, approve, { role: 'group-leader', group: 'ИС-24' });
+      await decideGroupConfirmation(id, approve, { role: 'group-leader', group: ownGroup });
     } catch (decisionError) {
       setError(decisionError instanceof Error ? decisionError.message : 'Не удалось обработать заявку.');
     } finally {
@@ -327,18 +342,51 @@ export function GroupConfirmationPage() {
     }
   }
 
+  async function submitGroupConfirmation() {
+    if (actionLock.current || busyId) return;
+    actionLock.current = true;
+    setBusyId('self');
+    setError('');
+    try {
+      await requestGroupConfirmation();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Не удалось отправить заявку.');
+    } finally {
+      actionLock.current = false;
+      setBusyId(null);
+    }
+  }
+
   return (
     <Box className="campus-page">
-      <PageHeader title="Заявки студентов группы">
-        <Typography color="text.secondary">Проверяйте и подтверждайте заявки на вступление в группу ИС-24</Typography>
+      <PageHeader title={isGroupLeader ? 'Заявки студентов группы' : 'Подтверждение группы'}>
+        <Typography color="text.secondary">
+          {isGroupLeader ? 'Проверяйте и подтверждайте заявки студентов своей группы' : 'Подтвердите старосте, что вы состоите в своей учебной группе'}
+        </Typography>
       </PageHeader>
-      {!isGroupLeader && <Alert severity="info">Подтверждение заявок доступно только студенту, назначенному старостой преподавателем.</Alert>}
-      {isGroupLeader && error && <Alert severity="error">{error}</Alert>}
+      {workflowError && <Alert severity="error">{workflowError}</Alert>}
+      {error && <Alert severity="error">{error}</Alert>}
+      {!isGroupLeader && (
+        <SectionCard title="Моя заявка" icon={<GroupsRoundedIcon />}>
+          <Stack spacing={1.5} alignItems="flex-start">
+            <Typography color="text.secondary">
+              {myGroupConfirmation
+                ? `Последняя заявка: ${myGroupConfirmation.status === 'pending' ? 'ожидает решения' : myGroupConfirmation.status === 'approved' ? 'подтверждена' : 'отклонена'} · ${formatDate(myGroupConfirmation.submittedAt)}`
+                : 'Заявка старосте ещё не отправлена.'}
+            </Typography>
+            {myGroupConfirmation?.status !== 'approved' && myGroupConfirmation?.status !== 'pending' && (
+              <Button variant="contained" disabled={busyId !== null} onClick={() => void submitGroupConfirmation()}>
+                {busyId === 'self' ? <CircularProgress size={18} color="inherit" /> : 'Отправить заявку старосте'}
+              </Button>
+            )}
+          </Stack>
+        </SectionCard>
+      )}
       {isGroupLeader && (
         <>
           <Card className="group-leader-summary">
             <CardContent>
-              <Box><Typography variant="overline">ВАША ГРУППА</Typography><Typography variant="h5" fontWeight={750}>ИС-24</Typography></Box>
+              <Box><Typography variant="overline">ВАША ГРУППА</Typography><Typography variant="h5" fontWeight={750}>{ownGroup || '—'}</Typography></Box>
               <Box><Typography variant="overline">ОЖИДАЮТ</Typography><Typography variant="h5" fontWeight={750}>{pending.length}</Typography></Box>
               <Box><Typography variant="overline">ОБРАБОТАНО</Typography><Typography variant="h5" fontWeight={750}>{processed.length}</Typography></Box>
             </CardContent>
@@ -388,8 +436,8 @@ export function GroupConfirmationPage() {
 }
 
 export function TeacherStudentsPage() {
-  const { students, teacherGroups, groupLeaders, groupConfirmations, decideGroupConfirmation, assignGroupLeader } = useCampusWorkflow();
-  const [selectedGroup, setSelectedGroup] = useState<string>(teacherGroups[0]);
+  const { students, teacherGroups, groupLeaders, groupConfirmations, decideGroupConfirmation, assignGroupLeader, error: workflowError } = useCampusWorkflow();
+  const [selectedGroup, setSelectedGroup] = useState<string>(teacherGroups[0] ?? '');
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -438,8 +486,10 @@ export function TeacherStudentsPage() {
       <PageHeader title="Мои студенты">
         <Typography color="text.secondary">Заявки на вступление, состав групп и назначение старост</Typography>
       </PageHeader>
+      {teacherGroups.length === 0 && <Alert severity="info">За вами пока не закреплены учебные группы.</Alert>}
+      {workflowError && <Alert severity="error">{workflowError}</Alert>}
       <Box className="teacher-student-toolbar">
-        <TextField select label="Учебная группа" value={selectedGroup} onChange={(event) => setSelectedGroup(event.target.value)} size="small">
+        <TextField select label="Учебная группа" value={selectedGroup} onChange={(event) => setSelectedGroup(event.target.value)} size="small" disabled={!teacherGroups.length}>
           {teacherGroups.map((group) => <MenuItem key={group} value={group}>{group}</MenuItem>)}
         </TextField>
       </Box>
@@ -521,19 +571,20 @@ export function TeacherStudentsPage() {
 }
 
 export function EventManagementPage() {
-  const { events, createEvent, addEventGroup, awardEventPoints, moderateEventReview, teacherGroups, activityAwards } = useCampusWorkflow();
+  const { events, createEvent, addEventGroup, awardEventPoints, moderateEventReview, teacherGroups, campusGroups, activityAwards, error: workflowError } = useCampusWorkflow();
+  const { currentUser } = useAuth();
   const location = useLocation();
   const isTeacherPage = location.pathname.startsWith('/teacher/');
-  const creator = isTeacherPage ? 'Мария Иванова' : 'Комитет студенческих инициатив';
-  const ownedEvents = events.filter((event) => event.createdBy === creator);
+  const creator = currentUser?.fullName ?? '';
+  const ownedEvents = events.filter((event) => event.creatorId === currentUser?.id);
   const groupEvents = events.filter((event) => event.format === 'group' && Date.parse(event.date) > Date.now());
-  const creatorAwards = activityAwards.filter((award) => award.awardedBy === creator);
+  const creatorAwards = activityAwards.filter((award) => award.awardedById === currentUser?.id);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('Обучение');
   const [locationText, setLocationText] = useState('');
-  const [startsAt, setStartsAt] = useState('2026-11-25T10:00');
-  const [endsAt, setEndsAt] = useState('2026-11-25T15:00');
+  const [startsAt, setStartsAt] = useState('');
+  const [endsAt, setEndsAt] = useState('');
   const [capacity, setCapacity] = useState('30');
   const [format, setFormat] = useState<CampusEvent['format']>('individual');
   const [groupMinPercent, setGroupMinPercent] = useState('50');
@@ -560,14 +611,14 @@ export function EventManagementPage() {
         description,
         category,
         location: locationText,
-        date: new Date(startsAt).toISOString(),
-        endsAt: new Date(endsAt).toISOString(),
+        date: startsAt,
+        endsAt,
         capacity: Number(capacity),
         format,
         groupMinPercent: format === 'group' ? Number(groupMinPercent) : null,
         activityType,
         maxPoints: Number(maxPoints),
-      }, creator);
+      });
       setTitle('');
       setDescription('');
       setLocationText('');
@@ -649,6 +700,7 @@ export function EventManagementPage() {
         <Typography color="text.secondary">БОА/БУА начисляются создателем после завершения мероприятия участникам, подтвердившим участие</Typography>
       </PageHeader>
       {error && <Alert severity="error">{error}</Alert>}
+      {workflowError && <Alert severity="error">{workflowError}</Alert>}
       {success && <Alert severity="success">{success}</Alert>}
       <SectionCard title="Создать мероприятие" icon={<EventAvailableRoundedIcon />}>
         <Box component="form" onSubmit={handleCreate} className="campus-form">
@@ -678,7 +730,7 @@ export function EventManagementPage() {
           </Button>
         </Box>
       </SectionCard>
-      {creator === 'Мария Иванова' && groupEvents.length > 0 && (
+      {isTeacherPage && groupEvents.length > 0 && (
         <SectionCard title="Записать свою группу" icon={<GroupsRoundedIcon />}>
           <Stack spacing={1.5}>
             {groupEvents.map((event) => (
@@ -812,20 +864,23 @@ export function EventManagementPage() {
 }
 
 export function WalletPage() {
-  const { walletBalance, transactions } = useCampusWorkflow();
+  const { walletBalance, transactions, error } = useCampusWorkflow();
   return (
     <Box className="campus-page">
       <PageHeader title="Кошелёк">
       </PageHeader>
+      {error && <Alert severity="error">{error}</Alert>}
       <Card className="wallet-balance-card">
         <CardContent>
           <AccountBalanceWalletRoundedIcon />
           <Typography variant="body2" color="text.secondary" mt={1}>Доступный баланс</Typography>
-          <Typography variant="h3" fontWeight={750}>{walletBalance.toLocaleString('ru-RU')}</Typography>
+          <Typography variant="h3" fontWeight={750}>{walletBalance?.toLocaleString('ru-RU') ?? '—'}</Typography>
           <Typography variant="body2" color="text.secondary">жетонов кампуса</Typography>
         </CardContent>
       </Card>
       <SectionCard title="История операций" icon={<AccountBalanceWalletRoundedIcon />}>
+        {walletBalance === null && <Alert severity="info" sx={{ mb: 2 }}>Баланс пока недоступен.</Alert>}
+        {walletBalance !== null && transactions.length === 0 && <Typography color="text.secondary">Операций пока нет.</Typography>}
         <Stack divider={<Divider flexItem />} spacing={0}>
           {transactions.map((transaction) => (
             <Stack key={transaction.id} direction="row" alignItems="center" spacing={1.5} className="wallet-transaction">
@@ -845,8 +900,6 @@ export function WalletPage() {
   );
 }
 
-const premiumPassPrice = 500;
-
 function InventoryCard({ item, onOpen, isOpening, canAfford, showRewards, onToggleRewards }: {
   item: InventoryItem;
   onOpen: (item: InventoryItem) => void;
@@ -855,6 +908,7 @@ function InventoryCard({ item, onOpen, isOpening, canAfford, showRewards, onTogg
   showRewards: boolean;
   onToggleRewards: () => void;
 }) {
+  const { caseOpeningPrice, campusCaseRewards } = useCampusWorkflow();
   return (
     <Card className="inventory-item">
       <CardContent>
@@ -866,12 +920,13 @@ function InventoryCard({ item, onOpen, isOpening, canAfford, showRewards, onTogg
           {showRewards ? 'Скрыть награды' : 'Показать награды'}
         </Button>
         <Button fullWidth variant="contained" disabled={isOpening || !canAfford} onClick={() => onOpen(item)}>
-          {isOpening ? <CircularProgress size={18} color="inherit" /> : `Открыть · ${caseOpeningPrice} жетонов`}
+          {isOpening ? <CircularProgress size={18} color="inherit" /> : caseOpeningPrice === null ? 'Открытие недоступно' : `Открыть · ${caseOpeningPrice} жетонов`}
         </Button>
-        {!canAfford && <Typography variant="caption" color="error">Недостаточно жетонов</Typography>}
+        {!canAfford && caseOpeningPrice !== null && <Typography variant="caption" color="error">Недостаточно жетонов</Typography>}
         {showRewards && (
           <Box className="case-reward-list">
             <Typography variant="subtitle2" fontWeight={750}>Содержимое кейса</Typography>
+            {campusCaseRewards.length === 0 && <Typography variant="body2" color="text.secondary">Состав кейса не загружен.</Typography>}
             {campusCaseRewards.map((reward) => (
               <Box className="case-reward-row" key={reward.name}>
                 <Box sx={{ minWidth: 0 }}>
@@ -889,16 +944,16 @@ function InventoryCard({ item, onOpen, isOpening, canAfford, showRewards, onTogg
 }
 
 export function BattlePassPage() {
-  const { walletBalance, academicRating, passExperience, premiumPassOwned, passRewards, purchasePremiumPass, claimPassReward } = useCampusWorkflow();
+  const { academicRating, passExperience, premiumPassOwned, premiumPassPrice, passRewards, claimPassReward, purchasePremiumPass, walletBalance, error: workflowError } = useCampusWorkflow();
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState('');
   const actionLock = useRef(false);
   const battlePassLevelsRef = useRef<HTMLDivElement>(null);
   const currentLevelRef = useRef<HTMLDivElement>(null);
-  const currentLevel = Math.min(50, Math.floor(passExperience / 20));
-  const progressInLevel = currentLevel >= 50 ? 20 : passExperience % 20;
-  const needed = currentLevel >= 50 ? 0 : 20 - progressInLevel;
-  const progressPercent = currentLevel >= 50 ? 100 : (progressInLevel / 20) * 100;
+  const currentLevel = passExperience === null ? null : Math.min(50, Math.floor(passExperience / 20));
+  const progressInLevel = passExperience === null ? null : currentLevel === 50 ? 20 : passExperience % 20;
+  const needed = progressInLevel === null || currentLevel === null || currentLevel >= 50 ? 0 : 20 - progressInLevel;
+  const progressPercent = progressInLevel === null ? 0 : currentLevel === 50 ? 100 : (progressInLevel / 20) * 100;
 
   useLayoutEffect(() => {
     const scrollContainer = battlePassLevelsRef.current;
@@ -951,26 +1006,31 @@ export function BattlePassPage() {
         <CardContent>
           <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} gap={2}>
             <Box>
-              <Typography variant="overline">СЕЗОН 2026/27</Typography>
-              <Typography variant="h3" className="battle-pass-level-title" fontWeight={750}>Уровень {currentLevel} / 50</Typography>
-              <Typography>{currentLevel >= 50 ? 'Максимальный уровень сезона' : `Ещё ${needed} АР до следующего уровня`}</Typography>
+              <Typography variant="overline">ПТУ-ПАСС</Typography>
+              <Typography variant="h3" className="battle-pass-level-title" fontWeight={750}>{currentLevel === null ? 'Уровень —' : `Уровень ${currentLevel} / 50`}</Typography>
+              <Typography>{currentLevel === null ? 'Прогресс будет отображён после подключения сервиса ПТУ-пасса.' : currentLevel >= 50 ? 'Максимальный уровень сезона' : `Ещё ${needed} АР до следующего уровня`}</Typography>
             </Box>
             <Box className="battle-pass-progress">
-              <Stack direction="row" justifyContent="space-between"><Typography variant="caption">Академический рейтинг</Typography><Typography variant="caption">{academicRating} АР · {progressInLevel} / 20</Typography></Stack>
+              <Stack direction="row" justifyContent="space-between"><Typography variant="caption">Академический рейтинг</Typography><Typography variant="caption">{academicRating === null ? '—' : `${academicRating} АР`} · {progressInLevel ?? '—'} / 20</Typography></Stack>
               <LinearProgress variant="determinate" value={progressPercent} />
             </Box>
           </Stack>
         </CardContent>
       </Card>
       {error && <Alert severity="error">{error}</Alert>}
+      {workflowError && <Alert severity="error">{workflowError}</Alert>}
       <SectionCard title="Уровни сезона" icon={<CardGiftcardRoundedIcon />}>
         <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'center' }} justifyContent="space-between" gap={1.5} mb={2}>
-          {premiumPassOwned ? <Chip size="small" color="success" label="Премиальный пропуск активен" /> : (
-            <Button variant="contained" disabled={busyAction !== null || walletBalance < premiumPassPrice} onClick={() => void handlePurchase()}>
+          {premiumPassOwned === true && <Chip size="small" color="success" label="Премиальный пропуск активен" />}
+          {premiumPassOwned === false && premiumPassPrice !== null && (
+            <Button variant="contained" disabled={busyAction !== null || walletBalance === null || walletBalance < premiumPassPrice} onClick={() => void handlePurchase()}>
               {busyAction === 'purchase' ? <CircularProgress size={18} color="inherit" /> : `Купить премиум · ${premiumPassPrice} жетонов`}
             </Button>
           )}
         </Stack>
+        {passRewards.length === 0 ? (
+          <Alert severity="info">В сезоне пока нет наград.</Alert>
+        ) : (
         <Box className="battle-pass-layout" aria-label="Все 50 уровней ПТУ-пасса">
           <Box className="battle-pass-legend" aria-hidden="true">
             <Box className="battle-pass-legend-spacer" />
@@ -988,9 +1048,9 @@ export function BattlePassPage() {
               const premiumReward = passRewards.find((reward) => reward.track === 'premium' && reward.level === level);
               return (
                 <Box
-                  className={`battle-pass-level${level <= currentLevel ? ' battle-pass-level-current' : ''}`}
+                  className={`battle-pass-level${level <= (currentLevel ?? 0) ? ' battle-pass-level-current' : ''}`}
                   key={level}
-                  ref={level === Math.max(currentLevel, 1) ? currentLevelRef : undefined}
+                  ref={level === Math.max(currentLevel ?? 1, 1) ? currentLevelRef : undefined}
                 >
                   <Typography variant="caption" fontWeight={750}>Ур. {level}</Typography>
                   {([
@@ -1002,11 +1062,11 @@ export function BattlePassPage() {
                         <>
                           <Typography className="battle-pass-reward-title" variant="caption" title={reward.title}>{reward.title}</Typography>
                           {reward.claimed ? <Chip size="small" label="Получено" color="success" /> :
-                            reward.level <= currentLevel && (track === 'free' || premiumPassOwned) ? (
+                            reward.level <= (currentLevel ?? 0) && (track === 'free' || premiumPassOwned === true) ? (
                               <Button size="small" disabled={busyAction !== null} onClick={() => void handleClaim(reward)}>
                                 {busyAction === reward.id ? <CircularProgress size={16} /> : 'Забрать'}
                               </Button>
-                            ) : <Typography variant="caption" color="text.secondary">{reward.level > currentLevel ? 'Закрыто' : 'Нужен пропуск'}</Typography>}
+                            ) : <Typography variant="caption" color="text.secondary">{reward.level > (currentLevel ?? 0) ? 'Закрыто' : 'Нужен пропуск'}</Typography>}
                         </>
                       )}
                     </Box>
@@ -1016,6 +1076,7 @@ export function BattlePassPage() {
             })}
           </Box>
         </Box>
+        )}
       </SectionCard>
       <Button component={Link} to="/student/inventory" variant="outlined" startIcon={<WorkspacePremiumRoundedIcon />}>Открыть инвентарь</Button>
     </Box>
@@ -1023,63 +1084,25 @@ export function BattlePassPage() {
 }
 
 export function InventoryPage() {
-  const { inventory, openCase, completeCaseOpening, walletBalance } = useCampusWorkflow();
+  const { inventory, openCase, walletBalance, caseOpeningPrice, error: workflowError } = useCampusWorkflow();
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [openedItem, setOpenedItem] = useState<InventoryItem | null>(null);
-  const [rouletteItems, setRouletteItems] = useState<Array<{ name: string; rarity?: InventoryItem['rarity']; isPrize: boolean }>>([]);
-  const [rouletteOffset, setRouletteOffset] = useState(0);
-  const [rouletteStopped, setRouletteStopped] = useState(false);
   const [error, setError] = useState('');
-  const [isRevealing, setIsRevealing] = useState(false);
-  const rouletteViewportRef = useRef<HTMLDivElement>(null);
-  const rouletteResultRef = useRef<HTMLDivElement>(null);
   const actionLock = useRef(false);
-
-  useEffect(() => {
-    if (isRevealing || rouletteStopped) {
-      rouletteResultRef.current?.scrollIntoView({
-        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-        block: 'center',
-      });
-    }
-  }, [isRevealing, rouletteStopped]);
 
   async function handleOpenCase(item: InventoryItem) {
     if (actionLock.current) return;
     actionLock.current = true;
     setOpeningId(item.id);
     setOpenedItem(null);
-    setRouletteItems([]);
-    setRouletteOffset(0);
-    setRouletteStopped(false);
     setError('');
-    setIsRevealing(true);
     try {
-    const reward = await openCase(item.id);
-    const prizeIndex = 18 + Math.floor(Math.random() * 8);
-    const reel = Array.from({ length: prizeIndex }, () => {
-      const previewReward = chooseCampusCaseReward();
-      return { name: previewReward.name, rarity: previewReward.rarity, isPrize: false };
-    });
-    setRouletteItems([...reel, { name: 'Сюрприз', isPrize: true }]);
-    await new Promise<void>((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve())));
-    const viewportWidth = rouletteViewportRef.current?.clientWidth ?? 540;
-    const prizeCenter = 12 + prizeIndex * 152 + 70;
-      setRouletteOffset(viewportWidth / 2 - prizeCenter);
-      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        await new Promise<void>((resolve) => window.setTimeout(resolve, 5400));
-      }
-      completeCaseOpening(reward);
-      setRouletteItems((current) => current.map((entry) => (
-        entry.isPrize ? { ...entry, name: reward.name, rarity: reward.rarity } : entry
-      )));
-      setRouletteStopped(true);
+      const reward = await openCase(item.id);
       setOpenedItem(reward);
     } catch (openError) {
       setError(openError instanceof Error ? openError.message : 'Не удалось открыть кейс.');
     } finally {
-      setIsRevealing(false);
       setOpeningId(null);
       actionLock.current = false;
     }
@@ -1088,12 +1111,14 @@ export function InventoryPage() {
   return (
     <Box className="campus-page">
       <PageHeader title="Инвентарь">
-        <Typography color="text.secondary">{formatNounCount(inventory.filter((item) => item.kind === 'case').length, 'кейс', 'кейса', 'кейсов')} · {walletBalance.toLocaleString('ru-RU')} жетонов</Typography>
+        <Typography color="text.secondary">{formatNounCount(inventory.filter((item) => item.kind === 'case').length, 'кейс', 'кейса', 'кейсов')} · {walletBalance?.toLocaleString('ru-RU') ?? '—'} жетонов</Typography>
       </PageHeader>
       {error && <Alert severity="error">{error}</Alert>}
+      {workflowError && <Alert severity="error">{workflowError}</Alert>}
+      {walletBalance === null && <Alert severity="info">Баланс пока недоступен.</Alert>}
       {inventory.filter((item) => item.kind === 'case').length === 0 ? (
         <SectionCard title="Пока пусто" icon={<CardGiftcardRoundedIcon />}>
-          <Typography color="text.secondary">Новых кейсов пока нет. Они появляются среди наград батл-пасса.</Typography>
+          <Typography color="text.secondary">Кейсы не загружены.</Typography>
         </SectionCard>
       ) : <Box className="inventory-grid">{inventory.filter((item) => item.kind === 'case').map((item) => (
         <InventoryCard
@@ -1101,81 +1126,59 @@ export function InventoryPage() {
           item={item}
           onOpen={handleOpenCase}
           isOpening={openingId === item.id}
-          canAfford={walletBalance >= caseOpeningPrice}
+          canAfford={walletBalance !== null && caseOpeningPrice !== null && walletBalance >= caseOpeningPrice}
           showRewards={selectedCaseId === item.id}
           onToggleRewards={() => setSelectedCaseId((current) => current === item.id ? null : item.id)}
         />
       ))}</Box>}
-      {(isRevealing || rouletteStopped) && (
-        <Box className="case-reveal" ref={rouletteResultRef} role="status" aria-live="polite">
-          <Box className="case-reveal-glow" />
-          <Typography variant="h6">{rouletteStopped ? 'Награда из кейса' : 'Кейс открывается…'}</Typography>
-          <Box className={`case-roulette${rouletteItems.length ? ' case-roulette-ready' : ''}${rouletteStopped ? ' case-roulette-stopped' : ''}`} ref={rouletteViewportRef}>
-            <Box className="case-roulette-marker" />
-            <Box className="case-roulette-track" style={{ transform: `translateX(${rouletteOffset}px)` }}>
-              {rouletteItems.map((entry, index) => (
-                <Box className={`case-roulette-item${entry.isPrize ? ' case-roulette-prize' : ''}`} key={`${index}:${entry.name}`}>
-                  {entry.isPrize && !rouletteStopped ? (
-                    <>
-                      <Avatar className="case-roulette-icon case-roulette-mystery">?</Avatar>
-                      <Typography variant="caption" fontWeight={650}>Награда</Typography>
-                      <Typography variant="caption" color="text.secondary">Сюрприз</Typography>
-                    </>
-                  ) : (
-                    <>
-                      <Avatar className={`case-roulette-icon rarity-${entry.rarity?.toLowerCase() ?? 'common'}`}><CardGiftcardRoundedIcon /></Avatar>
-                      <Typography variant="caption" fontWeight={650}>{entry.name}</Typography>
-                      <Typography variant="caption" color="text.secondary">{entry.rarity}</Typography>
-                    </>
-                  )}
-                </Box>
-              ))}
-            </Box>
+      {openedItem && (
+        <Card className="case-result-card" role="status" aria-live="polite">
+          <Avatar className="case-result-icon"><CardGiftcardRoundedIcon /></Avatar>
+          <Box>
+            <Typography variant="overline">ПРЕДМЕТ ДОБАВЛЕН В ИНВЕНТАРЬ</Typography>
+            <Typography variant="h6" fontWeight={750}>{openedItem.name}</Typography>
+            <Typography color="text.secondary">{openedItem.rarity} · {openedItem.source}</Typography>
           </Box>
-          {!rouletteItems.length && <LinearProgress />}
-          {openedItem && (
-            <Card className="case-result-card">
-              <Avatar className="case-result-icon"><CardGiftcardRoundedIcon /></Avatar>
-              <Box>
-                <Typography variant="overline">ПРЕДМЕТ ДОБАВЛЕН В ИНВЕНТАРЬ</Typography>
-                <Typography variant="h6" fontWeight={750}>{openedItem.name}</Typography>
-                <Typography color="text.secondary">{openedItem.rarity} · {openedItem.source}</Typography>
-              </Box>
-            </Card>
-          )}
-        </Box>
+        </Card>
       )}
     </Box>
   );
 }
 
-const requestStatusActions: Partial<Record<CertificateRequest['status'], Array<{ status: CertificateRequest['status']; label: string; color: 'primary' | 'success' | 'error' }>>> = {
-  Подана: [
-    { status: 'В обработке', label: 'Взять в работу', color: 'primary' },
-    { status: 'Отклонена', label: 'Отклонить', color: 'error' },
-  ],
-  'В обработке': [
-    { status: 'Готова', label: 'Отметить готовой', color: 'success' },
-    { status: 'Отклонена', label: 'Отклонить', color: 'error' },
-  ],
-  Готова: [{ status: 'Выдана', label: 'Отметить выданной', color: 'success' }],
-};
-
 export function CertificateManagementPage() {
-  const { certificateRequests, updateCertificateStatus, uploadCertificateDocument } = useCampusWorkflow();
+  const [certificateRequests, setCertificateRequests] = useState<CertificateRequestView[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [rejectionTarget, setRejectionTarget] = useState<CertificateRequestView | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
   const actionLock = useRef(false);
-  const pendingRequests = certificateRequests.filter((request) => ['Подана', 'В обработке'].includes(request.status));
-  const completedRequests = certificateRequests.filter((request) => !['Подана', 'В обработке'].includes(request.status));
+  const pendingRequests = certificateRequests.filter((request) => request.status === 'PENDING');
+  const completedRequests = certificateRequests.filter((request) => request.status !== 'PENDING');
 
-  async function handleStatusUpdate(request: CertificateRequest, status: CertificateRequest['status']) {
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    void listCertificates().then((items) => {
+      if (active) setCertificateRequests(items);
+    }).catch((loadError: unknown) => {
+      if (active) setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить заявления.');
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
+
+  async function handleStatusUpdate(request: CertificateRequestView, status: Exclude<CertificateStatus, 'PENDING'>, reason?: string) {
     if (actionLock.current) return;
     actionLock.current = true;
     setBusyId(request.id);
     setError('');
     try {
-      await updateCertificateStatus(request.id, status);
+      const updated = await updateCertificateRequestStatus(request.id, status, reason);
+      setCertificateRequests((current) => current.map((item) => item.id === request.id ? updated : item));
+      setRejectionTarget(null);
+      setRejectionReason('');
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : 'Не удалось изменить статус заявки.');
     } finally {
@@ -1184,96 +1187,83 @@ export function CertificateManagementPage() {
     }
   }
 
-  async function handleCertificateUpload(request: CertificateRequest, file: File | undefined) {
+  async function handleDocumentUpload(request: CertificateRequestView, file: File | null) {
     if (!file || actionLock.current) return;
-    if (file.type !== 'application/pdf' || !file.name.toLocaleLowerCase('ru').endsWith('.pdf')) {
-      setError('Электронную справку можно загрузить только в формате PDF.');
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      setError('Размер файла справки не должен превышать 10 МБ.');
+    if (!file.name.toLowerCase().endsWith('.pdf') || (file.type && file.type.toLowerCase() !== 'application/pdf') || file.size > 20 * 1024 * 1024) {
+      setError('Загрузите файл PDF размером не более 20 МБ.');
       return;
     }
     actionLock.current = true;
     setBusyId(request.id);
     setError('');
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          if (typeof reader.result !== 'string') {
-            reject(new Error('Не удалось прочитать файл справки.'));
-            return;
-          }
-          resolve(reader.result);
-        };
-        reader.onerror = () => reject(new Error('Не удалось прочитать файл справки.'));
-        reader.readAsDataURL(file);
-      });
-      await uploadCertificateDocument(request.id, { fileName: file.name, dataUrl });
+      const updated = await uploadCertificateDocument(request.id, file);
+      setCertificateRequests((current) => current.map((item) => item.id === request.id ? updated : item));
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : 'Не удалось загрузить электронную справку.');
+      setError(uploadError instanceof Error ? uploadError.message : 'Не удалось загрузить файл справки.');
     } finally {
       actionLock.current = false;
       setBusyId(null);
     }
   }
 
-  function renderRequest(request: CertificateRequest) {
-    const availableActions = (requestStatusActions[request.status] ?? []).filter((action) => (
-      !(request.deliveryMethod === 'Электронно' && request.status === 'В обработке' && action.status === 'Готова')
-    ));
+  async function handleDocumentDownload(request: CertificateRequestView) {
+    if (!request.documentAvailable || !request.documentName) return;
+    setError('');
+    try {
+      await downloadCertificateDocument(request.id, request.documentName);
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : 'Не удалось скачать файл справки.');
+    }
+  }
 
+  function renderRequest(request: CertificateRequestView) {
     return (
       <Card className="office-request-card" key={request.id} variant="outlined">
         <CardContent>
           <Box className="office-request-heading">
             <Box>
-              <Typography variant="h6" fontSize={16} fontWeight={750}>{request.type}</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {request.studentName} · {request.group} · {request.deliveryMethod}
-              </Typography>
+              <Typography variant="h6" fontSize={16} fontWeight={750}>{certificateTypeLabels[request.type]}</Typography>
+              <Typography variant="body2" color="text.secondary">{request.studentName}</Typography>
             </Box>
-            <Chip size="small" label={request.status} className={`certificate-status certificate-status-${request.status}`} />
+            <Chip size="small" label={certificateStatusLabels[request.status]} className={`certificate-status certificate-status-${request.status}`} />
           </Box>
-          {request.comment && <Typography className="office-request-comment">{request.comment}</Typography>}
           <Typography variant="caption" color="text.secondary">Подана {formatDate(request.createdAt)}</Typography>
-          {request.electronicDocument && (
-            <Button component="a" href={request.electronicDocument.dataUrl} download={request.electronicDocument.fileName} variant="outlined" size="small">
-              Скачать справку · {request.electronicDocument.fileName}
+          {request.rejectionReason && <Typography className="office-request-comment">{request.rejectionReason}</Typography>}
+          {request.documentAvailable && request.documentName && (
+            <Button
+              size="small"
+              onClick={() => void handleDocumentDownload(request)}
+            >
+              Скачать {request.documentName}
             </Button>
           )}
-          {request.deliveryMethod === 'Электронно' && request.status === 'В обработке' && (
-            <>
+          {request.status !== 'REJECTED' && (
+            <Stack direction={{ xs: 'column', sm: 'row' }} gap={1} className="office-request-actions">
               <Button component="label" variant="outlined" disabled={busyId !== null}>
-                {busyId === request.id ? <CircularProgress size={18} /> : 'Загрузить электронную справку (PDF)'}
+                {busyId === request.id ? <CircularProgress size={18} /> : request.documentAvailable ? 'Заменить PDF справки' : 'Загрузить PDF справки'}
                 <input
                   hidden
                   type="file"
                   accept="application/pdf,.pdf"
                   onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    event.target.value = '';
-                    void handleCertificateUpload(request, file);
+                    const input = event.currentTarget;
+                    const file = input.files?.[0] ?? null;
+                    input.value = '';
+                    void handleDocumentUpload(request, file);
                   }}
                 />
               </Button>
-              <Typography variant="caption" color="text.secondary">PDF-файл, не более 10 МБ</Typography>
-            </>
-          )}
-          {availableActions.length > 0 && (
-            <Stack direction={{ xs: 'column', sm: 'row' }} gap={1} className="office-request-actions">
-              {availableActions.map((action) => (
-                <Button
-                  key={action.status}
-                  variant={action.color === 'error' ? 'outlined' : 'contained'}
-                  color={action.color}
-                  disabled={busyId !== null}
-                  onClick={() => void handleStatusUpdate(request, action.status)}
-                >
-                  {busyId === request.id ? <CircularProgress size={18} color="inherit" /> : action.label}
-                </Button>
-              ))}
+              {request.status === 'PENDING' && (
+                <>
+                  <Button variant="contained" color="primary" disabled={busyId !== null} onClick={() => void handleStatusUpdate(request, 'APPROVED')}>
+                    {busyId === request.id ? <CircularProgress size={18} color="inherit" /> : 'Одобрить'}
+                  </Button>
+                  <Button variant="outlined" color="error" disabled={busyId !== null} onClick={() => { setRejectionTarget(request); setRejectionReason(''); }}>
+                    Отклонить
+                  </Button>
+                </>
+              )}
             </Stack>
           )}
         </CardContent>
@@ -1286,17 +1276,47 @@ export function CertificateManagementPage() {
       <PageHeader title="Заявления на справки">
       </PageHeader>
       <Box className="office-metrics">
-        <Card><CardContent><Typography variant="caption" color="text.secondary">Новые</Typography><Typography variant="h4" fontWeight={750}>{certificateRequests.filter((item) => item.status === 'Подана').length}</Typography></CardContent></Card>
-        <Card><CardContent><Typography variant="caption" color="text.secondary">В работе</Typography><Typography variant="h4" fontWeight={750}>{certificateRequests.filter((item) => item.status === 'В обработке').length}</Typography></CardContent></Card>
-        <Card><CardContent><Typography variant="caption" color="text.secondary">Готовы к выдаче</Typography><Typography variant="h4" fontWeight={750}>{certificateRequests.filter((item) => item.status === 'Готова').length}</Typography></CardContent></Card>
+        <Card><CardContent><Typography variant="caption" color="text.secondary">Новые</Typography><Typography variant="h4" fontWeight={750}>{pendingRequests.length}</Typography></CardContent></Card>
+        <Card><CardContent><Typography variant="caption" color="text.secondary">Одобрены</Typography><Typography variant="h4" fontWeight={750}>{certificateRequests.filter((item) => item.status === 'APPROVED').length}</Typography></CardContent></Card>
+        <Card><CardContent><Typography variant="caption" color="text.secondary">Отклонены</Typography><Typography variant="h4" fontWeight={750}>{certificateRequests.filter((item) => item.status === 'REJECTED').length}</Typography></CardContent></Card>
       </Box>
       {error && <Alert severity="error">{error}</Alert>}
       <SectionCard title="Требуют обработки" icon={<WorkspacePremiumRoundedIcon />}>
-        {pendingRequests.length ? <Stack spacing={1.5}>{pendingRequests.map(renderRequest)}</Stack> : <Typography color="text.secondary">Активных заявок нет.</Typography>}
+        {loading ? <CircularProgress size={24} /> : pendingRequests.length ? <Stack spacing={1.5}>{pendingRequests.map(renderRequest)}</Stack> : <Typography color="text.secondary">Активных заявок нет.</Typography>}
       </SectionCard>
       <SectionCard title="История заявок" icon={<CheckRoundedIcon />}>
-        {completedRequests.length ? <Stack spacing={1.5}>{completedRequests.map(renderRequest)}</Stack> : <Typography color="text.secondary">Завершённые заявки появятся здесь.</Typography>}
+        {completedRequests.length ? <Stack spacing={1.5}>{completedRequests.map(renderRequest)}</Stack> : <Typography color="text.secondary">Завершённых заявок нет.</Typography>}
       </SectionCard>
+      <Dialog open={rejectionTarget !== null} onClose={() => { if (!busyId) setRejectionTarget(null); }} fullWidth maxWidth="sm">
+        <DialogTitle>Отклонить заявление</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            required
+            multiline
+            minRows={2}
+            label="Причина отклонения"
+            value={rejectionReason}
+            onChange={(event) => setRejectionReason(event.target.value)}
+            inputProps={{ maxLength: 1000 }}
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button disabled={busyId !== null} onClick={() => setRejectionTarget(null)}>Отмена</Button>
+          <Button
+            color="error"
+            variant="contained"
+            disabled={busyId !== null || !rejectionReason.trim()}
+            onClick={() => {
+              if (rejectionTarget) void handleStatusUpdate(rejectionTarget, 'REJECTED', rejectionReason.trim());
+            }}
+          >
+            {busyId ? <CircularProgress size={18} color="inherit" /> : 'Подтвердить отказ'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
@@ -1304,11 +1324,11 @@ export function CertificateManagementPage() {
 const weekdays = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
 
 export function ScheduleManagementPage() {
-  const { scheduleEntries, createScheduleEntry } = useCampusWorkflow();
+  const { scheduleEntries, createScheduleEntry, campusGroups, error: workflowError } = useCampusWorkflow();
   const [weekday, setWeekday] = useState('Понедельник');
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('10:30');
-  const [group, setGroup] = useState('ИС-24');
+  const [group, setGroup] = useState('');
   const [subject, setSubject] = useState('');
   const [teacher, setTeacher] = useState('');
   const [room, setRoom] = useState('');
@@ -1342,6 +1362,7 @@ export function ScheduleManagementPage() {
     <Box className="campus-page">
       <PageHeader title="Расписание занятий">
       </PageHeader>
+      {workflowError && <Alert severity="error">{workflowError}</Alert>}
       <SectionCard title="Добавить занятие" icon={<CalendarMonthRoundedIcon />}>
         <Box component="form" onSubmit={handleCreate} className="schedule-entry-form">
           <TextField select label="День недели" value={weekday} onChange={(event) => setWeekday(event.target.value)} required>
@@ -1357,7 +1378,7 @@ export function ScheduleManagementPage() {
           <TextField label="Аудитория" value={room} onChange={(event) => setRoom(event.target.value)} required />
           {error && <Alert severity="error" className="schedule-form-message">{error}</Alert>}
           {success && <Alert severity="success" className="schedule-form-message">{success}</Alert>}
-          <Button type="submit" variant="contained" disabled={isLoading} startIcon={isLoading ? <CircularProgress size={18} color="inherit" /> : <AddRoundedIcon />}>
+          <Button type="submit" variant="contained" disabled={isLoading || campusGroups.length === 0} startIcon={isLoading ? <CircularProgress size={18} color="inherit" /> : <AddRoundedIcon />}>
             {isLoading ? 'Добавляем…' : 'Добавить в расписание'}
           </Button>
         </Box>
@@ -1389,14 +1410,25 @@ export function ScheduleManagementPage() {
 }
 
 export function CertificateRequestPage() {
-  const { certificateRequests, submitCertificateRequest } = useCampusWorkflow();
-  const [type, setType] = useState('Справка об обучении');
-  const [comment, setComment] = useState('');
-  const [deliveryMethod, setDeliveryMethod] = useState<'В учебной части' | 'Электронно'>('В учебной части');
+  const [certificateRequests, setCertificateRequests] = useState<CertificateRequestView[]>([]);
+  const [type, setType] = useState<CertificateType>('EDUCATION');
+  const [loading, setLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const actionLock = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+    void listMyCertificates().then((items) => {
+      if (active) setCertificateRequests(items);
+    }).catch((loadError: unknown) => {
+      if (active) setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить ваши заявления.');
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1406,14 +1438,24 @@ export function CertificateRequestPage() {
     setError('');
     setSuccess('');
     try {
-      await submitCertificateRequest(type, comment, deliveryMethod);
-      setComment('');
+      const request = await createCertificateRequest(type);
+      setCertificateRequests((current) => [request, ...current]);
       setSuccess('Заявка отправлена в учебную часть.');
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Не удалось подать заявку.');
     } finally {
       actionLock.current = false;
       setIsLoading(false);
+    }
+  }
+
+  async function handleDownload(request: CertificateRequestView) {
+    if (!request.documentAvailable || !request.documentName) return;
+    setError('');
+    try {
+      await downloadCertificateDocument(request.id, request.documentName);
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : 'Не удалось скачать справку.');
     }
   }
 
@@ -1424,17 +1466,15 @@ export function CertificateRequestPage() {
       </PageHeader>
       <SectionCard title="Подать заявку" icon={<WorkspacePremiumRoundedIcon />}>
         <Box component="form" onSubmit={handleSubmit} className="campus-form">
-          <TextField select label="Вид справки" value={type} onChange={(event) => setType(event.target.value)} fullWidth>
-            <MenuItem value="Справка об обучении">Справка об обучении</MenuItem>
-            <MenuItem value="Справка для общежития">Справка для общежития</MenuItem>
-            <MenuItem value="Справка о доходах">Справка о доходах</MenuItem>
-            <MenuItem value="Архивная справка">Архивная справка</MenuItem>
+          <TextField select label="Вид справки" value={type} onChange={(event) => {
+            const value = event.target.value;
+            setType(value === 'INCOME' || value === 'MILITARY' ? value : 'EDUCATION');
+          }} fullWidth>
+            <MenuItem value="EDUCATION">Справка об обучении</MenuItem>
+            <MenuItem value="INCOME">Справка о доходах</MenuItem>
+            <MenuItem value="MILITARY">Справка для военкомата</MenuItem>
           </TextField>
-          <TextField label="Комментарий (необязательно)" value={comment} onChange={(event) => setComment(event.target.value)} multiline minRows={2} fullWidth />
-          <TextField select label="Способ получения" value={deliveryMethod} onChange={(event) => setDeliveryMethod(event.target.value as typeof deliveryMethod)} fullWidth>
-            <MenuItem value="В учебной части">В учебной части</MenuItem>
-            <MenuItem value="Электронно">Электронно</MenuItem>
-          </TextField>
+          <Typography variant="body2" color="text.secondary">Готовую справку в формате PDF можно скачать после того, как учебная часть прикрепит её к одобренной заявке.</Typography>
           {error && <Alert severity="error">{error}</Alert>}
           {success && <Alert severity="success">{success}</Alert>}
           <Button type="submit" variant="contained" disabled={isLoading} startIcon={isLoading ? <CircularProgress size={18} color="inherit" /> : undefined}>
@@ -1444,15 +1484,17 @@ export function CertificateRequestPage() {
       </SectionCard>
       <SectionCard title="Мои заявки" icon={<EventAvailableRoundedIcon />}>
         <Stack divider={<Divider flexItem />} spacing={1.5}>
+          {loading && <CircularProgress size={24} />}
+          {!loading && certificateRequests.length === 0 && !error && <Typography color="text.secondary">Заявлений пока нет.</Typography>}
           {certificateRequests.map((request) => (
             <Stack key={request.id} direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" gap={1}>
-              <Box sx={{ minWidth: 0 }}><Typography fontWeight={650} sx={{ overflowWrap: 'anywhere' }}>{request.type}</Typography><Typography variant="caption" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>{request.comment ? `${request.comment} · ` : ''}{request.deliveryMethod} · {formatDate(request.createdAt, false)}</Typography></Box>
-              {request.electronicDocument && (
-                <Button component="a" href={request.electronicDocument.dataUrl} download={request.electronicDocument.fileName} size="small">
-                  Скачать PDF
-                </Button>
-              )}
-              <Chip size="small" label={request.status} className={`certificate-status certificate-status-${request.status}`} />
+              <Box sx={{ minWidth: 0 }}><Typography fontWeight={650} sx={{ overflowWrap: 'anywhere' }}>{certificateTypeLabels[request.type]}</Typography><Typography variant="caption" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>{formatDate(request.createdAt, false)}</Typography>{request.rejectionReason && <Typography variant="body2" color="error">{request.rejectionReason}</Typography>}</Box>
+              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                <Chip size="small" label={certificateStatusLabels[request.status]} className={`certificate-status certificate-status-${request.status}`} />
+                {request.status === 'APPROVED' && request.documentAvailable && request.documentName && (
+                  <Button size="small" onClick={() => void handleDownload(request)}>Скачать PDF</Button>
+                )}
+              </Stack>
             </Stack>
           ))}
         </Stack>

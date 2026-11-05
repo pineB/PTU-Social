@@ -31,6 +31,15 @@ public class StudentProfile {
 	@Column(name = "is_group_leader", nullable = false)
 	private boolean groupLeader;
 
+	@Column(name = "academic_rating", nullable = false)
+	private int academicRating;
+
+	@Column(name = "boa_points", nullable = false)
+	private int boaPoints;
+
+	@Column(name = "bua_points", nullable = false)
+	private int buaPoints;
+
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt;
 

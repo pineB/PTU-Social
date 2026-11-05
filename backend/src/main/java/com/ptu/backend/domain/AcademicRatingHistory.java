@@ -12,7 +12,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "academic_rating_history")
+@Table(name = "legacy_academic_rating_history")
 @Getter
 @Setter
 @NoArgsConstructor

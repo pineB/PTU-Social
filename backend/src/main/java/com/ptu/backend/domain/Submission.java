@@ -17,7 +17,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "submissions")
+@Table(name = "legacy_submissions")
 @Getter
 @Setter
 @NoArgsConstructor

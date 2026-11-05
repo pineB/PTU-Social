@@ -20,40 +20,23 @@ import {
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded';
+import AutoStoriesRoundedIcon from '@mui/icons-material/AutoStoriesRounded';
+import AssignmentTurnedInRoundedIcon from '@mui/icons-material/AssignmentTurnedInRounded';
+import EventAvailableRoundedIcon from '@mui/icons-material/EventAvailableRounded';
 import { dashboards, type DashboardData } from '../data/dashboards';
 import { useLocation } from 'react-router-dom';
 import { ActivationResultNotice, RegistrationResultNotice } from './AccountPages';
 import { Link } from 'react-router-dom';
 import { useCampusWorkflow } from '../data/campus-workflow';
-
-const focusCards = {
-  student: {
-    label: 'БАТЛ-ПАСС · СЕЗОН 2026/27',
-    title: 'Уровень 34',
-    description: 'Ещё 11 АР до следующего уровня',
-    footnote: '689 из 700 АР',
-    progress: 45,
-  },
-  teacher: {
-    label: 'РАСПИСАНИЕ НА СЕГОДНЯ',
-    title: '4 занятия',
-    description: 'Первое занятие · 09:00',
-    footnote: '12 работ на проверку',
-  },
-  organizer: {
-    label: 'МЕРОПРИЯТИЯ',
-    title: '3 мероприятия',
-    footnote: '87 участников',
-  },
-  'academic-office': {
-    label: 'СПРАВКИ',
-    title: '18 заявлений',
-  },
-} as const;
+import { useTaskWorkflow } from '../data/task-workflow';
 
 export default function DashboardPage({ data, focusOverride }: { data: DashboardData; focusOverride?: { label: string; title: string; description?: string; footnote?: string; progress?: number } }) {
   const [search, setSearch] = useState('');
-  const focus = focusOverride ?? focusCards[data.role];
+  const focus = focusOverride ?? {
+    label: 'Обзор',
+    title: 'Данные пока недоступны',
+    description: 'Когда backend предоставит данные для этого раздела, они появятся здесь.',
+  };
   const filteredRows = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('ru');
     if (!query) return data.rows;
@@ -144,7 +127,9 @@ export default function DashboardPage({ data, focusOverride }: { data: Dashboard
                   {filteredRows.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={3} align="center">
-                        <Typography color="text.secondary" py={2}>Ничего не найдено</Typography>
+                        <Typography color="text.secondary" py={2}>
+                          {data.rows.length ? 'Ничего не найдено' : 'Данные из backend пока отсутствуют.'}
+                        </Typography>
                       </TableCell>
                     </TableRow>
                   )}
@@ -178,27 +163,28 @@ export default function DashboardPage({ data, focusOverride }: { data: Dashboard
 
 export function StudentDashboard() {
   const location = useLocation();
-  const { academicRating, boaPoints, buaPoints, passExperience } = useCampusWorkflow();
+  const { academicRating, boaPoints, buaPoints } = useCampusWorkflow();
+  const { assignments } = useTaskWorkflow();
   const routeState = location.state as { registrationSubmitted?: boolean } | null;
-  const level = Math.min(50, Math.floor(passExperience / 20));
-  const remaining = level >= 50 ? 0 : 20 - passExperience % 20;
   const data = {
     ...dashboards.student,
-    metrics: dashboards.student.metrics.map((metric) => ({
-      ...metric,
-      value: metric.label === 'Академический рейтинг' ? String(academicRating)
-        : metric.label === 'Учебная активность' ? String(buaPoints)
-          : metric.label === 'Общественная активность' ? String(boaPoints)
-            : metric.label === 'ПТУ-пасс' ? `${level} ур.`
-              : metric.value,
+    metrics: [
+      { label: 'Академический рейтинг', value: academicRating === null ? '—' : String(academicRating), detail: 'за текущий семестр', icon: AutoStoriesRoundedIcon, color: '#3569b8', background: '#e7f0fc' },
+      { label: 'Учебная активность', value: buaPoints === null ? '—' : String(buaPoints), detail: 'БУА', icon: AssignmentTurnedInRoundedIcon, color: '#3569b8', background: '#e7f0fc' },
+      { label: 'Общественная активность', value: boaPoints === null ? '—' : String(boaPoints), detail: 'БОА', icon: EventAvailableRoundedIcon, color: '#b8782b', background: '#fbf0df' },
+      { label: 'ПТУ-пасс', value: '—', detail: 'данные недоступны', icon: GroupsRoundedIcon, color: '#3569b8', background: '#e7f0fc' },
+    ],
+    rows: assignments.map((assignment) => ({
+      subject: assignment.title,
+      detail: `${assignment.subject} · ${assignment.teacher}`,
+      status: assignment.status,
+      tone: assignment.status === 'accepted' ? 'success' as const : assignment.status === 'overdue' ? 'warning' as const : 'neutral' as const,
     })),
   };
   const focus = {
-    ...focusCards.student,
-    title: `Уровень ${level}`,
-    description: level >= 50 ? 'Максимальный уровень сезона' : `Ещё ${remaining} АР до следующего уровня`,
-    footnote: `${academicRating} АР · ${level} из 50 уровней`,
-    progress: (level / 50) * 100,
+    label: 'ПТУ-пасс',
+    title: 'Данные недоступны',
+    description: 'Информация о сезоне и уровнях пока не подключена к backend.',
   };
   return (
     <>
@@ -210,11 +196,25 @@ export function StudentDashboard() {
 
 export function TeacherDashboard() {
   const location = useLocation();
+  const { assignments, submissions } = useTaskWorkflow();
   const routeState = location.state as { invitationActivated?: boolean } | null;
+  const data = {
+    ...dashboards.teacher,
+    metrics: [
+      { label: 'Заданий', value: String(assignments.length), detail: 'назначены вам', icon: AssignmentTurnedInRoundedIcon, color: '#3569b8', background: '#e7f0fc' },
+      { label: 'Работ на проверку', value: String(submissions.filter((item) => item.status === 'submitted').length), detail: 'ожидают проверки', icon: AutoStoriesRoundedIcon, color: '#3569b8', background: '#e7f0fc' },
+    ],
+    rows: assignments.map((assignment) => ({
+      subject: assignment.title,
+      detail: assignment.subject,
+      status: new Date(assignment.dueAt).toLocaleDateString('ru-RU'),
+      tone: 'neutral' as const,
+    })),
+  };
   return (
     <>
       <ActivationResultNotice activated={routeState?.invitationActivated === true} />
-      <DashboardPage data={dashboards.teacher} />
+      <DashboardPage data={data} />
     </>
   );
 }

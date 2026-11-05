@@ -17,16 +17,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import lombok.extern.slf4j.Slf4j;
 
-/**
- * Background jobs. The {@code reviews} table is owned by the activities/reviews module
- * (not implemented yet), so it is accessed through plain SQL and the job is a no-op
- * while the table does not exist.
- */
+/** Background jobs for persisted reviews, invitations and assignments. */
 @Slf4j
 @Component
 public class ScheduledTasks {
-
-	static final String REVIEWS_TABLE = "public.reviews";
 
 	private final JdbcTemplate jdbc;
 	private final WalletService wallets;
@@ -41,11 +35,6 @@ public class ScheduledTasks {
 	@Scheduled(cron = "0 0 * * * *")
 	@Transactional
 	public void processApprovedReviews() {
-		if (!tableExists(REVIEWS_TABLE)) {
-			log.debug("Table {} is absent, skipping review rewards", REVIEWS_TABLE);
-			return;
-		}
-
 		BigDecimal reward = properties.reviews().rewardAmount();
 		int monthlyLimit = properties.reviews().monthlyLimit();
 		Instant monthStart = LocalDate.now(ZoneId.systemDefault())
@@ -78,11 +67,6 @@ public class ScheduledTasks {
 		}
 	}
 
-	@Scheduled(cron = "0 0 1 1 * *")
-	public void processMonthlyConversion() {
-		log.info("Monthly currency conversion started: conversion rules are not implemented yet");
-	}
-
 	@Scheduled(cron = "0 0 * * * *")
 	@Transactional
 	public void processOverdueTasks() {
@@ -92,11 +76,6 @@ public class ScheduledTasks {
 		if (expiredInvites > 0) {
 			log.info("Expired {} teacher invites", expiredInvites);
 		}
-	}
-
-	private boolean tableExists(String table) {
-		Boolean exists = jdbc.queryForObject("select to_regclass(?::text) is not null", Boolean.class, table);
-		return Boolean.TRUE.equals(exists);
 	}
 
 	record ReviewRow(long id, UUID authorId) {

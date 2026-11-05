@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import {
+  Alert,
   AppBar,
   Avatar,
   Box,
@@ -21,7 +22,6 @@ import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
 import NotificationsNoneRoundedIcon from '@mui/icons-material/NotificationsNoneRounded';
 import AssignmentTurnedInRoundedIcon from '@mui/icons-material/AssignmentTurnedInRounded';
 import RateReviewRoundedIcon from '@mui/icons-material/RateReviewRounded';
-import DescriptionRoundedIcon from '@mui/icons-material/DescriptionRounded';
 import SpaceDashboardRoundedIcon from '@mui/icons-material/SpaceDashboardRounded';
 import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded';
 import LightModeRoundedIcon from '@mui/icons-material/LightModeRounded';
@@ -42,11 +42,13 @@ import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import EmojiEventsRoundedIcon from '@mui/icons-material/EmojiEventsRounded';
 import LeaderboardRoundedIcon from '@mui/icons-material/LeaderboardRounded';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import ExitToAppRoundedIcon from '@mui/icons-material/ExitToAppRounded';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { dashboards, type RoleId } from '../data/dashboards';
 import { useCampusWorkflow } from '../data/campus-workflow';
 import { useTaskWorkflow } from '../data/task-workflow';
 import { useColorMode } from '../theme/ColorModeProvider';
+import { useAuth } from '../auth/AuthProvider';
 
 const drawerWidth = 272;
 
@@ -78,7 +80,7 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
       </Box>
 
       <Box className="workspace-switcher">
-        {navigation.map((item) => {
+        {navigation.filter((item) => item.id === role).map((item) => {
           const active = role === item.id;
           return (
             <Button
@@ -187,10 +189,10 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
               <ListItemIcon className="role-icon"><EventAvailableRoundedIcon /></ListItemIcon>
               <ListItemText primary="Мероприятия" primaryTypographyProps={{ fontWeight: location.pathname === '/student/events' ? 700 : 600, fontSize: 14 }} />
             </ListItemButton>
-            {isGroupLeader && <ListItemButton component={NavLink} to="/student/group-confirmation" onClick={onNavigate} className={`role-link${isActive('/student/group-confirmation') ? ' role-link-active' : ''}`} aria-label="Заявки студентов группы" aria-current={isActive('/student/group-confirmation') ? 'page' : undefined}>
+            <ListItemButton component={NavLink} to="/student/group-confirmation" onClick={onNavigate} className={`role-link${isActive('/student/group-confirmation') ? ' role-link-active' : ''}`} aria-label={isGroupLeader ? 'Заявки студентов группы' : 'Подтверждение учебной группы'} aria-current={isActive('/student/group-confirmation') ? 'page' : undefined}>
               <ListItemIcon className="role-icon"><GroupsRoundedIcon /></ListItemIcon>
-              <ListItemText primary="Заявки группы" primaryTypographyProps={{ fontWeight: location.pathname === '/student/group-confirmation' ? 700 : 600, fontSize: 14 }} />
-            </ListItemButton>}
+              <ListItemText primary={isGroupLeader ? 'Заявки группы' : 'Подтвердить группу'} primaryTypographyProps={{ fontWeight: location.pathname === '/student/group-confirmation' ? 700 : 600, fontSize: 14 }} />
+            </ListItemButton>
             <ListItemButton component={NavLink} to="/student/battle-pass" onClick={onNavigate} className={`role-link${isActive('/student/battle-pass') ? ' role-link-active' : ''}`} aria-label="ПТУ-пасс" aria-current={isActive('/student/battle-pass') ? 'page' : undefined}>
               <ListItemIcon className="role-icon"><SportsEsportsRoundedIcon /></ListItemIcon>
               <ListItemText primary="ПТУ-пасс" primaryTypographyProps={{ fontWeight: location.pathname === '/student/battle-pass' ? 700 : 600, fontSize: 14 }} />
@@ -230,15 +232,34 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notificationAnchor, setNotificationAnchor] = useState<HTMLElement | null>(null);
   const location = useLocation();
-  const role = navigation.find(({ id }) => location.pathname.startsWith(`/${id}`))?.id ?? 'student';
+  const navigate = useNavigate();
+  const { session, currentUser, profileError, logout } = useAuth();
+  const { walletBalance, isGroupLeader, groupConfirmations, events, error: campusError } = useCampusWorkflow();
+  const role: RoleId = session?.role === 'TEACHER'
+    ? 'teacher'
+    : session?.role === 'ORGANIZER'
+      ? 'organizer'
+      : session?.role === 'ACADEMIC_OFFICE'
+        ? 'academic-office'
+        : 'student';
   const profile = dashboards[role];
+  const profileName = currentUser?.fullName ?? '';
+  const roleCaption = currentUser?.groupName
+    ? `${currentUser.groupName} · студент`
+    : role === 'teacher'
+      ? 'Преподаватель'
+      : role === 'organizer'
+        ? 'Организатор мероприятий'
+        : role === 'academic-office'
+          ? 'Учебная часть'
+          : '';
   const pageTitles: Record<string, string> = {
     '/student/profile': 'Профиль',
     '/student/awards': 'Лента наград',
     '/student/leaderboard': 'Таблица лидеров',
     '/student/tasks': 'Задания',
     '/student/events': 'Мероприятия',
-    '/student/group-confirmation': 'Заявки студентов группы',
+    '/student/group-confirmation': isGroupLeader ? 'Заявки студентов группы' : 'Подтверждение группы',
     '/student/wallet': 'Кошелёк',
     '/student/battle-pass': 'ПТУ-пасс',
     '/student/inventory': 'Инвентарь',
@@ -252,15 +273,10 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
   };
   const pageTitle = pageTitles[location.pathname]
     ?? (location.pathname.startsWith('/student/people/') ? 'Профиль студента' : profile.title);
-  const profileInitials = profile.profileName
-    .split(' ')
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('');
+  const profileInitials = profileName.slice(0, 2).toLocaleUpperCase('ru');
   const closeMobile = () => setMobileOpen(false);
   const { mode, toggleMode } = useColorMode();
   const { assignments, submissions } = useTaskWorkflow();
-  const { walletBalance, isGroupLeader, groupConfirmations, events, certificateRequests } = useCampusWorkflow();
   const ModeIcon = mode === 'dark' ? LightModeRoundedIcon : DarkModeRoundedIcon;
   const modeLabel = mode === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему';
   const notifications: HeaderNotification[] = [];
@@ -276,8 +292,8 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
       });
     });
     events.filter((event) => new Date(event.endsAt).getTime() < Date.now()).forEach((event) => {
-      const participant = event.participants.find((item) => item.studentName === profile.profileName && item.participationConfirmed);
-      const hasReview = event.reviews.some((review) => review.studentName === profile.profileName);
+      const participant = event.participants.find((item) => item.studentId === currentUser?.id && item.participationConfirmed);
+      const hasReview = event.reviews.some((review) => review.studentId === currentUser?.id);
       if (participant && !hasReview) {
         notifications.push({
           id: `review-${event.id}`,
@@ -311,7 +327,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
       });
     });
   } else if (role === 'organizer') {
-    events.filter((event) => event.createdBy === profile.profileName && new Date(event.endsAt).getTime() < Date.now()).forEach((event) => {
+    events.filter((event) => event.createdBy === profileName && new Date(event.endsAt).getTime() < Date.now()).forEach((event) => {
       const pendingParticipants = event.participants.filter((participant) => participant.awardedPoints === undefined);
       if (pendingParticipants.length > 0) {
         notifications.push({
@@ -322,16 +338,6 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
           icon: <WorkspacePremiumRoundedIcon />,
         });
       }
-    });
-  } else {
-    certificateRequests.filter((request) => request.status === 'Подана').forEach((request) => {
-      notifications.push({
-        id: `certificate-${request.id}`,
-        title: 'Новая заявка на справку',
-        description: `${request.studentName} · ${request.type}`,
-        to: '/academic-office/certificates',
-        icon: <DescriptionRoundedIcon />,
-      });
     });
   }
   const visibleNotifications = notifications.slice(0, 6);
@@ -358,6 +364,8 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
       </Box>
 
       <Box className="main-column" sx={{ ml: { md: `${drawerWidth}px` } }}>
+        {profileError && <Alert severity="error" sx={{ mx: 2, mt: 1 }}>{profileError}</Alert>}
+        {campusError && <Alert severity="error" sx={{ mx: 2, mt: 1 }}>{campusError}</Alert>}
         <AppBar position="sticky" color="inherit" elevation={0} className="topbar">
           <Toolbar className="topbar-inner">
             <IconButton
@@ -376,9 +384,9 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
                 to="/student/wallet"
                 className="topbar-balance"
                 startIcon={<AccountBalanceWalletRoundedIcon />}
-                aria-label={`Баланс: ${walletBalance.toLocaleString('ru-RU')} жетонов. Открыть кошелёк`}
+                aria-label={`Баланс: ${walletBalance?.toLocaleString('ru-RU') ?? 'нет данных'} жетонов. Открыть кошелёк`}
               >
-                <span>{walletBalance.toLocaleString('ru-RU')}</span>
+                <span>{walletBalance?.toLocaleString('ru-RU') ?? '—'}</span>
                 <span className="topbar-balance-unit">жетонов</span>
               </Button>
             )}
@@ -409,20 +417,32 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
                   )}
                 </IconButton>
               </Tooltip>
+              <Tooltip title="Выйти из аккаунта">
+                <IconButton
+                  aria-label="Выйти из аккаунта"
+                  onClick={() => {
+                    logout();
+                    navigate('/login', { replace: true });
+                  }}
+                  className="logout-button"
+                >
+                  <ExitToAppRoundedIcon />
+                </IconButton>
+              </Tooltip>
             </Box>
             {role === 'student' ? (
-              <Button component={NavLink} to="/student/profile" className="topbar-user" aria-label={`Профиль: ${profile.profileName}`}>
+              <Button component={NavLink} to="/student/profile" className="topbar-user" aria-label={`Профиль: ${profileName}`}>
                 <Avatar className="topbar-avatar">{profileInitials}</Avatar>
                 <Box className="topbar-user-copy">
-                  <Typography variant="body2" fontWeight={700} noWrap>{profile.profileName}</Typography>
-                  <Typography variant="caption" color="text.secondary" noWrap>{profile.profileCaption}</Typography>
+                  <Typography variant="body2" fontWeight={700} noWrap>{profileName}</Typography>
+                  <Typography variant="caption" color="text.secondary" noWrap>{roleCaption || profile.title}</Typography>
                 </Box>
               </Button>
             ) : (
-              <Box className="topbar-user topbar-user-static" aria-label={`${profile.profileName}, ${profile.profileCaption}`}>
+              <Box className="topbar-user topbar-user-static" aria-label={profileName}>
                 <Avatar className="topbar-avatar">{profileInitials}</Avatar>
                 <Box className="topbar-user-copy">
-                  <Typography variant="body2" fontWeight={700} noWrap>{profile.profileName}</Typography>
+                  <Typography variant="body2" fontWeight={700} noWrap>{profileName}</Typography>
                 </Box>
               </Box>
             )}

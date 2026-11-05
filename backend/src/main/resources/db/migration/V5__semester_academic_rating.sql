@@ -5,5 +5,5 @@ CREATE TABLE semester_academic_ratings (
     total_rating INTEGER NOT NULL DEFAULT 0,
     archived_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     semester_label VARCHAR(64) NOT NULL,
-    CONSTRAINT fk_semester_rating_group FOREIGN KEY (group_id) REFERENCES groups_table(id)
+    CONSTRAINT fk_semester_rating_group FOREIGN KEY (group_id) REFERENCES legacy_groups(id)
 );

@@ -220,7 +220,6 @@ html[data-theme='dark'] .metric-icon { background: color-mix(in srgb, var(--bran
 .account-form-content { margin-top: 26px; }
 .account-submit { min-height: 46px; }
 .account-select-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(105px, .7fr); gap: 12px; }
-.demo-notice { font-size: 12px !important; line-height: 1.55 !important; }
 .registration-result { margin-bottom: 18px; }
 .profile-hero-card, .profile-history-card { border-radius: 16px !important; }
 .profile-hero-content { display: flex; align-items: center; gap: 18px; padding: 24px !important; }

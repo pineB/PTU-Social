@@ -15,6 +15,12 @@ public interface TeacherAssignmentRepository extends JpaRepository<TeacherAssign
 
 	boolean existsByTeacherIdAndGroupIdAndSemesterId(UUID teacherId, UUID groupId, UUID semesterId);
 
+	boolean existsByTeacherIdAndGroupIdAndDisciplineIdAndSemesterId(UUID teacherId, UUID groupId,
+			UUID disciplineId, UUID semesterId);
+
+	boolean existsByTeacherIdAndGroupIdAndDisciplineIdAndSemesterIdAndStatus(UUID teacherId, UUID groupId,
+			UUID disciplineId, UUID semesterId, AssignmentStatus status);
+
 	@Query("""
 			select distinct a.groupId from TeacherAssignment a
 			where a.teacherId = :teacherId and a.semesterId = :semesterId and a.status = :status

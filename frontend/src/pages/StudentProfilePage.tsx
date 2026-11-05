@@ -12,8 +12,8 @@ import EmojiEventsRoundedIcon from '@mui/icons-material/EmojiEventsRounded';
 import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded';
 import AssignmentTurnedInRoundedIcon from '@mui/icons-material/AssignmentTurnedInRounded';
 import type { SvgIconComponent } from '@mui/icons-material';
-import { dashboards } from '../data/dashboards';
 import { useCampusWorkflow } from '../data/campus-workflow';
+import { useAuth } from '../auth/AuthProvider';
 
 interface ProfileMetric {
   label: string;
@@ -22,21 +22,15 @@ interface ProfileMetric {
   icon: SvgIconComponent;
 }
 
-const history = [
-  { title: 'Практическая работа № 3', detail: 'Базы данных · оценка 5', date: 'Сегодня', points: '+90 АР', type: 'academic' },
-  { title: 'Волонтёрский день колледжа', detail: 'Участие подтверждено', date: 'Вчера', points: '+35 БОА', type: 'social' },
-  { title: 'Защита проекта', detail: 'Веб-разработка · оценка 5', date: '22 октября', points: '+100 АР', type: 'academic' },
-  { title: 'Открытый день колледжа', detail: 'Участие подтверждено', date: '18 октября', points: '+50 БОА', type: 'social' },
-] as const;
-
 export default function StudentProfilePage() {
-  const student = dashboards.student;
+  const { currentUser, profileLoading, profileError } = useAuth();
   const { academicRating, boaPoints, buaPoints, activityAwards } = useCampusWorkflow();
-  const initials = student.profileName.split(' ').slice(0, 2).map((part) => part[0]).join('');
+  const profileName = currentUser?.fullName ?? '';
+  const initials = profileName.split(' ').slice(0, 2).map((part) => part[0]).join('');
   const profileMetrics: ProfileMetric[] = [
-    { label: 'Академический рейтинг', value: String(academicRating), description: 'за текущий семестр', icon: AutoStoriesRoundedIcon },
-    { label: 'БОА', value: String(boaPoints), description: 'общественная активность', icon: GroupsRoundedIcon },
-    { label: 'БУА', value: String(buaPoints), description: 'учебная активность', icon: AssignmentTurnedInRoundedIcon },
+    { label: 'Академический рейтинг', value: academicRating === null ? '—' : String(academicRating), description: 'за текущий семестр', icon: AutoStoriesRoundedIcon },
+    { label: 'БОА', value: boaPoints === null ? '—' : String(boaPoints), description: 'общественная активность', icon: GroupsRoundedIcon },
+    { label: 'БУА', value: buaPoints === null ? '—' : String(buaPoints), description: 'учебная активность', icon: AssignmentTurnedInRoundedIcon },
   ];
   const recentAwards = activityAwards.map((award) => ({
     title: award.eventTitle,
@@ -45,7 +39,7 @@ export default function StudentProfilePage() {
     points: `+${award.points} ${award.activityType}`,
     type: award.activityType === 'БОА' ? 'social' : 'academic',
   }));
-  const profileHistory = [...recentAwards, ...history];
+  const profileHistory = recentAwards;
 
   return (
     <Box className="student-profile-page">
@@ -53,12 +47,13 @@ export default function StudentProfilePage() {
         <CardContent className="profile-hero-content">
           <Avatar className="profile-hero-avatar">{initials}</Avatar>
           <Box className="profile-hero-copy">
-            <Typography variant="h4">{student.profileName}</Typography>
-            <Typography color="text.secondary" mt={0.5}>{student.profileCaption}</Typography>
+            <Typography variant="h4">{profileLoading ? 'Загрузка профиля…' : profileName}</Typography>
+            <Typography color="text.secondary" mt={0.5}>{currentUser?.groupName ?? 'Студент'}</Typography>
           </Box>
           <Chip label="Студент" className="profile-role-chip" />
         </CardContent>
       </Card>
+      {profileError && <Typography color="error">{profileError}</Typography>}
 
       <Box className="profile-metrics-grid">
         {profileMetrics.map((metric) => {
@@ -98,6 +93,7 @@ export default function StudentProfilePage() {
                 <Chip size="small" label={item.points} className={`history-points history-points-${item.type}`} />
               </Box>
             ))}
+            {profileHistory.length === 0 && <Typography color="text.secondary">История активности пока пуста.</Typography>}
           </Box>
         </CardContent>
       </Card>

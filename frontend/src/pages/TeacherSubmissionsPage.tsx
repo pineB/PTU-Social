@@ -5,6 +5,7 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   Chip,
   CircularProgress,
   Dialog,
@@ -14,6 +15,7 @@ import {
   DialogTitle,
   FormControlLabel,
   IconButton,
+  MenuItem,
   Radio,
   RadioGroup,
   Stack,
@@ -31,6 +33,7 @@ import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import AttachFileRoundedIcon from '@mui/icons-material/AttachFileRounded';
 import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
+import { downloadWorkspaceAttachment } from '../api/workspace';
 import { calculateAward, useTaskWorkflow, type ReviewStatus, type StudentSubmission, type TeacherGrade } from '../data/task-workflow';
 
 const reviewStatusLabels: Record<ReviewStatus, string> = {
@@ -72,39 +75,80 @@ function formatPendingCount(count: number): string {
   return `${count} ${word} ${singular ? 'ждёт' : 'ждут'} проверки`;
 }
 
-function FeedbackAttachmentInput({ file, onChange, disabled }: { file: File | null; onChange: (file: File | null) => void; disabled: boolean }) {
-  return (
-    <Button component="label" variant="outlined" startIcon={<AttachFileRoundedIcon />} disabled={disabled} className="feedback-file-button">
-      {file?.name ?? 'Прикрепить файл к комментарию'}
-      <input
-        hidden
-        type="file"
-        accept=".pdf,.doc,.docx,.zip,.txt,.png,.jpg,.jpeg"
-        onChange={(event) => onChange(event.target.files?.[0] ?? null)}
-      />
-    </Button>
-  );
-}
-
 export default function TeacherSubmissionsPage() {
-  const { assignments, submissions, acceptSubmission, returnSubmission } = useTaskWorkflow();
+  const {
+    assignments,
+    submissions,
+    teachingAssignments,
+    acceptSubmission,
+    returnSubmission,
+    createAssignment,
+    isLoading: isDataLoading,
+    error: dataError,
+  } = useTaskWorkflow();
   const [filter, setFilter] = useState<'all' | ReviewStatus>('submitted');
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [selectedTeachingAssignment, setSelectedTeachingAssignment] = useState('');
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskDescription, setTaskDescription] = useState('');
+  const [taskDueAt, setTaskDueAt] = useState('');
+  const [taskMaxPoints, setTaskMaxPoints] = useState('100');
+  const [allowLateSubmission, setAllowLateSubmission] = useState(false);
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
+  const [createTaskError, setCreateTaskError] = useState('');
   const [reviewing, setReviewing] = useState<StudentSubmission | null>(null);
   const [returnTarget, setReturnTarget] = useState<StudentSubmission | null>(null);
   const [gradeTarget, setGradeTarget] = useState<StudentSubmission | null>(null);
   const [selectedGrade, setSelectedGrade] = useState<TeacherGrade | ''>('');
   const [returnComment, setReturnComment] = useState('');
   const [acceptComment, setAcceptComment] = useState('');
-  const [returnFile, setReturnFile] = useState<File | null>(null);
-  const [acceptFile, setAcceptFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [busySubmissionId, setBusySubmissionId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const actionLock = useRef(false);
+  const createTaskLock = useRef(false);
   const visibleSubmissions = filter === 'all'
     ? submissions
     : submissions.filter((submission) => submission.status === filter);
   const pendingCount = submissions.filter((submission) => submission.status === 'submitted').length;
+
+  async function handleCreateTask(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (createTaskLock.current || isCreatingTask) return;
+    const assignment = teachingAssignments.find((item) =>
+      `${item.groupId}:${item.disciplineId}` === selectedTeachingAssignment,
+    );
+    if (!assignment) {
+      setCreateTaskError('Выберите дисциплину и группу.');
+      return;
+    }
+
+    createTaskLock.current = true;
+    setIsCreatingTask(true);
+    setCreateTaskError('');
+    try {
+      await createAssignment({
+        groupId: assignment.groupId,
+        disciplineId: assignment.disciplineId,
+        title: taskTitle.trim(),
+        description: taskDescription.trim(),
+        dueAt: new Date(taskDueAt).toISOString(),
+        maxPoints: Number(taskMaxPoints),
+        allowLateSubmission,
+      });
+      setCreateDialogOpen(false);
+      setTaskTitle('');
+      setTaskDescription('');
+      setTaskDueAt('');
+      setTaskMaxPoints('100');
+      setAllowLateSubmission(false);
+    } catch (createError) {
+      setCreateTaskError(createError instanceof Error ? createError.message : 'Не удалось создать задание.');
+    } finally {
+      createTaskLock.current = false;
+      setIsCreatingTask(false);
+    }
+  }
 
   async function handleAccept(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -115,11 +159,10 @@ export default function TeacherSubmissionsPage() {
     setBusySubmissionId(submission.id);
     setError('');
     try {
-      await acceptSubmission(submission.id, selectedGrade, acceptComment.trim(), acceptFile?.name);
+      await acceptSubmission(submission.id, selectedGrade, acceptComment.trim());
       setGradeTarget(null);
       setSelectedGrade('');
       setAcceptComment('');
-      setAcceptFile(null);
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Не удалось принять работу.');
     } finally {
@@ -138,10 +181,9 @@ export default function TeacherSubmissionsPage() {
     setBusySubmissionId(returnTarget.id);
     setError('');
     try {
-      await returnSubmission(returnTarget.id, returnComment.trim(), returnFile?.name);
+      await returnSubmission(returnTarget.id, returnComment.trim());
       setReturnTarget(null);
       setReturnComment('');
-      setReturnFile(null);
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Не удалось вернуть работу.');
     } finally {
@@ -156,10 +198,29 @@ export default function TeacherSubmissionsPage() {
       <Box className="task-page-heading">
         <Typography variant="h4" className="welcome-title">Сдачи студентов</Typography>
         <Typography color="text.secondary" mt={0.5}>{formatPendingCount(pendingCount)}</Typography>
+        <Button
+          variant="contained"
+          sx={{ mt: 2, alignSelf: 'flex-start' }}
+          disabled={isDataLoading || teachingAssignments.length === 0}
+          onClick={() => {
+            setSelectedTeachingAssignment(teachingAssignments[0]
+              ? `${teachingAssignments[0].groupId}:${teachingAssignments[0].disciplineId}`
+              : '');
+            setCreateTaskError('');
+            setCreateDialogOpen(true);
+          }}
+        >
+          Создать задание
+        </Button>
       </Box>
 
       <Card className="review-table-card">
         <CardContent className="review-table-content">
+          {(dataError || error) && <Alert severity="error" sx={{ mb: 2 }}>{error || dataError}</Alert>}
+          {isDataLoading && <CircularProgress size={28} aria-label="Загрузка сдач" />}
+          {!isDataLoading && !dataError && teachingAssignments.length === 0 && (
+            <Alert severity="info" sx={{ mb: 2 }}>Для создания задания преподавателю нужно назначить группу и дисциплину.</Alert>
+          )}
           <Stack direction="row" spacing={1} className="task-filters">
             {([
               ['submitted', 'На проверке'],
@@ -172,8 +233,6 @@ export default function TeacherSubmissionsPage() {
               </Button>
             ))}
           </Stack>
-
-          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
           <TableContainer>
             <Table aria-label="Сдачи студентов">
@@ -203,7 +262,13 @@ export default function TeacherSubmissionsPage() {
                       </TableCell>
                       <TableCell className="submission-file-cell">
                         {submission.fileName
-                          ? <Chip size="small" icon={<AttachFileRoundedIcon />} label={submission.fileName} className="attached-file-chip" />
+                          ? <Chip
+                              size="small"
+                              icon={<AttachFileRoundedIcon />}
+                              label={submission.fileName}
+                              onClick={() => submission.attachmentUrl && void downloadWorkspaceAttachment(submission.attachmentUrl, submission.fileName ?? 'work')}
+                              className="attached-file-chip"
+                            />
                           : <Typography variant="caption" color="text.secondary">Без файла</Typography>}
                       </TableCell>
                       <TableCell>{formatSubmittedAt(submission.submittedAt)}</TableCell>
@@ -228,10 +293,10 @@ export default function TeacherSubmissionsPage() {
                           </Tooltip>
                           {isPending && (
                             <>
-                              <Button size="small" color="inherit" startIcon={busy && isLoading ? <CircularProgress size={15} /> : <CloseRoundedIcon />} disabled={isLoading} onClick={() => { setReturnComment(''); setReturnFile(null); setReturnTarget(submission); }}>
+                              <Button size="small" color="inherit" startIcon={busy && isLoading ? <CircularProgress size={15} /> : <CloseRoundedIcon />} disabled={isLoading} onClick={() => { setReturnComment(''); setReturnTarget(submission); }}>
                                 Вернуть
                               </Button>
-                              <Button size="small" variant="contained" startIcon={<CheckRoundedIcon />} disabled={isLoading} onClick={() => { setSelectedGrade(''); setAcceptComment(''); setAcceptFile(null); setGradeTarget(submission); }}>
+                              <Button size="small" variant="contained" startIcon={<CheckRoundedIcon />} disabled={isLoading} onClick={() => { setSelectedGrade(''); setAcceptComment(''); setGradeTarget(submission); }}>
                                 Принять
                               </Button>
                             </>
@@ -253,6 +318,76 @@ export default function TeacherSubmissionsPage() {
         </CardContent>
       </Card>
 
+      <Dialog open={createDialogOpen} onClose={() => { if (!isCreatingTask) setCreateDialogOpen(false); }} fullWidth maxWidth="sm">
+        <Box component="form" onSubmit={handleCreateTask}>
+          <DialogTitle>Новое задание</DialogTitle>
+          <DialogContent>
+            <Stack spacing={2} mt={1}>
+              <TextField
+                select
+                label="Дисциплина и группа"
+                value={selectedTeachingAssignment}
+                onChange={(event) => setSelectedTeachingAssignment(event.target.value)}
+                required
+                fullWidth
+              >
+                {teachingAssignments.map((item) => (
+                  <MenuItem key={`${item.groupId}:${item.disciplineId}`} value={`${item.groupId}:${item.disciplineId}`}>
+                    {item.disciplineName} · {item.groupName}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                label="Название"
+                value={taskTitle}
+                onChange={(event) => setTaskTitle(event.target.value)}
+                inputProps={{ maxLength: 200 }}
+                required
+                fullWidth
+              />
+              <TextField
+                label="Описание задания"
+                value={taskDescription}
+                onChange={(event) => setTaskDescription(event.target.value)}
+                multiline
+                minRows={3}
+                required
+                fullWidth
+              />
+              <TextField
+                label="Срок сдачи"
+                type="datetime-local"
+                value={taskDueAt}
+                onChange={(event) => setTaskDueAt(event.target.value)}
+                InputLabelProps={{ shrink: true }}
+                required
+                fullWidth
+              />
+              <TextField
+                label="Максимум АР"
+                type="number"
+                inputProps={{ min: 1, max: 100 }}
+                value={taskMaxPoints}
+                onChange={(event) => setTaskMaxPoints(event.target.value)}
+                required
+                fullWidth
+              />
+              <FormControlLabel
+                control={<Checkbox checked={allowLateSubmission} onChange={(event) => setAllowLateSubmission(event.target.checked)} />}
+                label="Разрешить сдачу после срока"
+              />
+              {createTaskError && <Alert severity="error">{createTaskError}</Alert>}
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setCreateDialogOpen(false)} disabled={isCreatingTask}>Отмена</Button>
+            <Button type="submit" variant="contained" disabled={isCreatingTask || !selectedTeachingAssignment}>
+              {isCreatingTask ? <CircularProgress size={18} color="inherit" /> : 'Создать задание'}
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
+
       <Dialog open={reviewing !== null} onClose={() => setReviewing(null)} fullWidth maxWidth="sm">
         <DialogTitle>Работа студента</DialogTitle>
         <DialogContent>
@@ -261,11 +396,18 @@ export default function TeacherSubmissionsPage() {
               <Typography fontWeight={650}>{reviewing.assignmentTitle}</Typography>
               <Typography variant="body2" color="text.secondary">{reviewing.studentName} · {reviewing.group}</Typography>
               <Typography variant="body2" className="submission-text">{reviewing.workText}</Typography>
-              {reviewing.fileName && <Chip size="small" label={reviewing.fileName} className="attached-file-chip" />}
+              {reviewing.fileName && reviewing.attachmentUrl && (
+                <Chip
+                  size="small"
+                  icon={<AttachFileRoundedIcon />}
+                  label={reviewing.fileName}
+                  onClick={() => reviewing.attachmentUrl && void downloadWorkspaceAttachment(reviewing.attachmentUrl, reviewing.fileName ?? 'work')}
+                  className="attached-file-chip"
+                />
+              )}
               {reviewing.teacherComment && (
                 <Alert severity={reviewing.status === 'accepted' ? 'success' : 'warning'}>
                   <strong>Комментарий преподавателя:</strong> {reviewing.teacherComment}
-                  {reviewing.feedbackFileName && <Box><Chip size="small" icon={<AttachFileRoundedIcon />} label={reviewing.feedbackFileName} className="attached-file-chip" /></Box>}
                 </Alert>
               )}
             </Stack>
@@ -301,7 +443,6 @@ export default function TeacherSubmissionsPage() {
                 minRows={2}
                 fullWidth
               />
-              <FeedbackAttachmentInput file={acceptFile} onChange={setAcceptFile} disabled={isLoading} />
             </Stack>
             {gradeTarget && selectedGrade !== '' && (() => {
               const assignment = assignments.find((item) => item.id === gradeTarget.assignmentId);
@@ -337,7 +478,7 @@ export default function TeacherSubmissionsPage() {
               fullWidth
               autoFocus
             />
-            <Box mt={2}><FeedbackAttachmentInput file={returnFile} onChange={setReturnFile} disabled={isLoading} /></Box>
+            <Box mt={2}></Box>
             {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
           </DialogContent>
           <DialogActions>

@@ -17,7 +17,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "submission_versions")
+@Table(name = "legacy_submission_versions")
 @Getter
 @Setter
 @NoArgsConstructor

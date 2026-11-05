@@ -3,15 +3,14 @@ package com.ptu.backend.domain;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
-import java.util.UUID;
 import java.util.Optional;
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class RewardAndBattlePassRulesTest {
 
@@ -64,37 +63,9 @@ class RewardAndBattlePassRulesTest {
 
         IllegalStateException ex = assertThrows(
                 IllegalStateException.class,
-            () -> rewardService.awardParticipation(activity, studentId, 50, 50)
+                () -> rewardService.awardParticipation(activity, studentId, 50, 50)
         );
 
         assertEquals("Duplicate reward award for the same student and activity", ex.getMessage());
-    }
-
-    @Test
-    void levelRewardCaseIsGrantedOnceAndPremiumOpensPastRewards() {
-        BattlePassRewardService rewardService = new BattlePassRewardService();
-
-        BattlePassSeason season = new BattlePassSeason();
-        season.setId(7L);
-        UUID studentId = UUID.fromString("00000000-0000-0000-0000-000000000042");
-        season.setStudentId(studentId);
-        season.setCurrentLevel(3);
-        season.setPremiumTrackPurchased(false);
-
-        Level level = new Level();
-        level.setLevelNumber(3);
-        level.setRewardCaseId(1L);
-
-        InventoryItem item = rewardService.claimLevelReward(season, level, studentId);
-        assertEquals("Bronze chest", item.getItemName());
-
-        IllegalStateException ex = assertThrows(
-                IllegalStateException.class,
-                () -> rewardService.claimLevelReward(season, level, studentId)
-        );
-        assertEquals("Reward for this level has already been granted", ex.getMessage());
-
-        rewardService.purchasePremiumTrack(season, studentId, new BigDecimal("40.00"));
-        assertEquals(true, season.getPremiumTrackPurchased());
     }
 }

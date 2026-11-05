@@ -17,7 +17,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "groups_table")
+@Table(name = "legacy_groups")
 @Getter
 @Setter
 @NoArgsConstructor

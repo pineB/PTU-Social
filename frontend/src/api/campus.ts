@@ -1,0 +1,276 @@
+import apiClient from './client';
+
+export interface CampusEvent {
+  id: string;
+  title: string;
+  description: string;
+  date: string;
+  endsAt: string;
+  location: string;
+  category: string;
+  capacity: number;
+  format: 'individual' | 'group';
+  groupMinPercent: number | null;
+  activityType: 'БОА' | 'БУА';
+  maxPoints: number;
+  createdBy: string;
+  creatorId?: string;
+  groupRegistrations: EventGroupRegistration[];
+  participants: EventParticipant[];
+  reviews: EventReview[];
+}
+
+export interface EventReview {
+  id: string;
+  studentId?: string;
+  studentName: string;
+  rating: number;
+  comment: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+}
+
+export interface EventParticipant {
+  id: string;
+  studentId?: string;
+  studentName: string;
+  group: string;
+  enrolledAt: string;
+  participationConfirmed: boolean;
+  groupRegistrationId?: string;
+  awardedPoints?: number;
+  awardedPercent?: number;
+  awardedAt?: string;
+}
+
+export interface EventGroupRegistration {
+  id: string;
+  group: string;
+  groupSize: number;
+  addedBy: string;
+  requestedAt: string;
+}
+
+export interface GroupConfirmation {
+  id: string;
+  studentName: string;
+  email: string;
+  group: string;
+  submittedAt: string;
+  status: 'pending' | 'approved' | 'rejected';
+}
+
+export interface GroupStudent {
+  id: string;
+  studentName: string;
+  email: string;
+  group: string;
+}
+
+export interface ActivityAward {
+  id: string;
+  eventId: string;
+  eventTitle: string;
+  studentName: string;
+  group: string;
+  activityType: 'БОА' | 'БУА';
+  activityPercent: number;
+  points: number;
+  awardedBy: string;
+  awardedById?: string;
+  createdAt: string;
+}
+
+export interface WalletTransaction {
+  id: string;
+  title: string;
+  detail: string;
+  amount: number;
+  createdAt: string;
+}
+
+export interface WalletSnapshot {
+  balance: number;
+  transactions: WalletTransaction[];
+}
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  kind: 'case' | 'cosmetic';
+  cosmeticType?: 'avatar' | 'avatar-frame' | 'profile-background' | 'badge';
+  rarity?: 'Обычный' | 'Редкий' | 'Эпический';
+  source: string;
+  obtainedAt: string;
+}
+
+export interface CampusCaseReward {
+  name: string;
+  cosmeticType: NonNullable<InventoryItem['cosmeticType']>;
+  rarity: NonNullable<InventoryItem['rarity']>;
+  chance: number;
+}
+
+export interface CampusGroup {
+  id: string;
+  name: string;
+  size: number;
+  leaderId?: string | null;
+}
+
+export interface ScheduleEntry {
+  id: string;
+  weekday: string;
+  startTime: string;
+  endTime: string;
+  group: string;
+  subject: string;
+  teacher: string;
+  room: string;
+}
+
+export interface PassReward {
+  id: string;
+  track: 'free' | 'premium';
+  level: number;
+  title: string;
+  rewardKind: 'case' | 'cosmetic';
+  claimed: boolean;
+}
+
+export interface BattlePassSnapshot {
+  experience: number;
+  premiumPassOwned: boolean;
+  premiumPrice: number;
+  rewards: PassReward[];
+}
+
+export interface CampusCatalog {
+  groups: CampusGroup[];
+  caseOpeningPrice: number;
+  caseRewards: CampusCaseReward[];
+}
+
+export interface CreateCampusEventRequest {
+  title: string;
+  description: string;
+  date: string;
+  endsAt: string;
+  location: string;
+  category: string;
+  capacity: number;
+  format: CampusEvent['format'];
+  groupMinPercent: number | null;
+  activityType: CampusEvent['activityType'];
+  maxPoints: number;
+}
+
+export async function listCampusEvents(): Promise<CampusEvent[]> {
+  const response = await apiClient.get<CampusEvent[]>('/campus/events');
+  return response.data;
+}
+
+export async function createCampusEvent(event: CreateCampusEventRequest): Promise<CampusEvent> {
+  const response = await apiClient.post<CampusEvent>('/campus/events', event);
+  return response.data;
+}
+
+export async function joinCampusEvent(eventId: string): Promise<void> {
+  await apiClient.post(`/campus/events/${eventId}/join`);
+}
+
+export async function addCampusEventGroup(eventId: string, groupId: string): Promise<void> {
+  await apiClient.post(`/campus/events/${eventId}/groups`, { groupId });
+}
+
+export async function confirmCampusEventGroup(eventId: string, registrationId: string): Promise<void> {
+  await apiClient.post(`/campus/events/${eventId}/groups/${registrationId}/confirm`);
+}
+
+export async function awardCampusEventPoints(eventId: string, participantId: string, activityPercent: number): Promise<void> {
+  await apiClient.post(`/campus/events/${eventId}/participants/${participantId}/award`, { activityPercent });
+}
+
+export async function submitCampusEventReview(eventId: string, rating: number, comment: string): Promise<void> {
+  await apiClient.post(`/campus/events/${eventId}/reviews`, { rating, comment });
+}
+
+export async function moderateCampusEventReview(eventId: string, reviewId: string, approved: boolean): Promise<void> {
+  await apiClient.patch(`/campus/events/${eventId}/reviews/${reviewId}`, { approved });
+}
+
+export async function getCampusGroups(): Promise<CampusGroup[]> {
+  const response = await apiClient.get<CampusGroup[]>('/campus/groups');
+  return response.data;
+}
+
+export async function listCampusStudents(groupId: string): Promise<GroupStudent[]> {
+  const response = await apiClient.get<GroupStudent[]>('/campus/students', { params: { groupId } });
+  return response.data;
+}
+
+export async function listGroupConfirmations(groupId: string): Promise<GroupConfirmation[]> {
+  const response = await apiClient.get<GroupConfirmation[]>('/campus/group-confirmations', { params: { groupId } });
+  return response.data;
+}
+
+export async function updateGroupConfirmation(id: string, approve: boolean): Promise<void> {
+  await apiClient.patch(`/campus/group-confirmations/${id}`, { approve });
+}
+
+export async function getMyGroupConfirmation(): Promise<GroupConfirmation | null> {
+  const response = await apiClient.get<GroupConfirmation | null>('/campus/group-confirmations/me');
+  return response.status === 204 ? null : response.data;
+}
+
+export async function assignCampusGroupLeader(groupId: string, studentId: string): Promise<void> {
+  await apiClient.put(`/campus/groups/${groupId}/leader`, { studentId });
+}
+
+export async function requestCampusGroupMembership(): Promise<GroupConfirmation> {
+  const response = await apiClient.post<GroupConfirmation>('/campus/group-confirmations/me');
+  return response.data;
+}
+
+export async function getCampusCatalog(): Promise<CampusCatalog> {
+  const response = await apiClient.get<CampusCatalog>('/campus/catalog');
+  return response.data;
+}
+
+export async function getBattlePass(): Promise<BattlePassSnapshot> {
+  const response = await apiClient.get<BattlePassSnapshot>('/campus/pass');
+  return response.data;
+}
+
+export async function purchasePremiumPass(): Promise<void> {
+  await apiClient.post('/campus/pass/premium');
+}
+
+export async function claimBattlePassReward(rewardId: string): Promise<void> {
+  await apiClient.post(`/campus/pass/rewards/${rewardId}/claim`);
+}
+
+export async function openCampusCase(caseId: string): Promise<InventoryItem> {
+  const response = await apiClient.post<InventoryItem>(`/campus/cases/${caseId}/open`);
+  return response.data;
+}
+
+export async function getCampusInventory(): Promise<InventoryItem[]> {
+  const response = await apiClient.get<InventoryItem[]>('/campus/inventory');
+  return response.data;
+}
+
+export async function getCampusSchedule(): Promise<ScheduleEntry[]> {
+  const response = await apiClient.get<ScheduleEntry[]>('/campus/schedule');
+  return response.data;
+}
+
+export async function createCampusScheduleEntry(entry: Omit<ScheduleEntry, 'id'>): Promise<ScheduleEntry> {
+  const response = await apiClient.post<ScheduleEntry>('/campus/schedule', entry);
+  return response.data;
+}
+
+export async function getWallet(): Promise<WalletSnapshot> {
+  const response = await apiClient.get<WalletSnapshot>('/wallet/me');
+  return response.data;
+}

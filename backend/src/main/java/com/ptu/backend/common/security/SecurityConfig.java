@@ -38,6 +38,7 @@ public class SecurityConfig {
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 				.authorizeHttpRequests(requests -> requests
 						.requestMatchers("/api/auth/**", "/actuator/health/**", "/actuator/info").permitAll()
+						.requestMatchers("/api/academic/faculties/**").permitAll()
 						.requestMatchers("/api/academic/teacher-invites/**").hasRole("ACADEMIC_OFFICE")
 						.anyRequest().authenticated())
 				.exceptionHandling(handling -> handling
