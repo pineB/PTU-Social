@@ -1,10 +1,10 @@
 package com.ptu.backend;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
+import com.ptu.backend.support.AbstractIntegrationTest;
 
-@SpringBootTest
-class BackendApplicationTests {
+import org.junit.jupiter.api.Test;
+
+class BackendApplicationTests extends AbstractIntegrationTest {
 
 	@Test
 	void contextLoads() {

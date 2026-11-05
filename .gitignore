@@ -1,2 +1,5 @@
 .idea
 backend/docs/agent-logs.md
+docs
+.aider-desk
+.env

@@ -1,0 +1,368 @@
+
+# 2026-10-30T11:35:32.465Z
++Твой список задач: изучить /docs/spec/AGENTS.md, прочесть общую информацию по проекту в docs/information_about_project.md, хранить информацию из 1-го файла в контексте на постоянной основе, ко второму - обращаться по мере необходимости. Так же, ты обязан писать логи в agent-log.md, в него должен включаться мой запрос / решения которые мы принимали, и то как ты строил шаги / процесс, запомни: пиши логи очень лаконично и экономно для сохранения токенов. После выполнения этих действий, в рамках теста напиши первый лог. В дальних запросах я проведу тебя по задачам, которые предстоит выполнить в рамках проекта
+
+# 2026-10-30T11:46:53.383Z
++Текущий проект, был сформирован с помощью spingboot.io, нам нужно завершить настройку spingboot если это требуется. Небходимо подготовить flyway и dockercompose.yml (в проекте мы используем postgresql, redis) сейчас рассчитываем dockercompose.yml на бэкенд, фронтенд будет, но дописан позже.
+
+# 2026-10-30T11:54:33.335Z
++y, но: (1) Spring Boot — 3.5.x, не 4.1.2; (2) файл — docker-compose.yml; (3) V1 — только расширения, users/roles — отдельной V2 при старте auth; (4) Testcontainers — зависимости сейчас, smoke-тест контекста можно сразу, остальные тесты — по мере появления сущностей.
+
+# 2026-10-30T12:38:16.668Z
++Выполняем реализацию регистрации и инвайтов. Список задач:
++1) Создание преподавателей Учебной частью (инвайт на email).
++2) Регистрация студента: RegistrationRequest, генерация кода в Redis (TTL 10 мин, лимиты: 5 ошибок, 3 отправки/15 мин).
++3) Подтверждение email и одобрение группы (Преподом или Старостой).
++4) Bcrypt для паролей.
+
+# 2026-10-30T12:42:08.515Z
++JWT — да, access 24h.
++
++Seeder — и тестовые данные в тестах, и dev-seeder (@Profile("dev"), идемпотентный) с 2 факультетами, 3 группами, 5 дисциплинами, 1 текущим семестром.
++
++app.base-url + TTL 7 дней — ок, добавь в .env.example.
++
++Rate limiting — позже, отдельной задачей.
++
++Уточни:
++
++role и status — varchar + CHECK, не нативный Postgres enum.
++
++«Текущий семестр» — через is_current на semesters (ровно один true).
++
++Пароль в registration_requests — либо TTL 7 дней + удаление при reject, либо перенос установки пароля на шаг после одобрения. Что выбираешь?
++
++Повторная регистрация на тот же email — partial unique index на email WHERE status IN ('PENDING_EMAIL','EMAIL_VERIFIED').
++
++Парольная политика — минимум 8 символов, буква + цифра, валидация в DTO.
++
++Fallback одобрения, если нет ни преподавателя, ни старосты — ACADEMIC_OFFICE.
++
++JWT TTL — явно в конфиг, не хардкод.
+
+# 2026-10-31T15:13:02.965Z
++У нас уже есть JWT-аутентификация и ApiError (через @RestControllerAdvice). Нужно внедрить Rate Limiting (Spring Boot + Redis) по лимитам из ТЗ: 120 запросов/мин для авторизованных, 5 запросов/мин для входа (/api/auth/login), плюс ограничения на регистрацию (3 отправки кода/15 мин). И нужно убедиться, что ошибки 401 (Unauthorized), 403 (Forbidden) и 429 (Too Many Requests) отдаются в едином JSON-формате ApiError.
++
++Задачи:
++
++Rate Limiting: Реализуй фильтр на базе Redis (например, через RedisTemplate с атомарным INCR + EXPIRE, или Bucket4j, если он уже в зависимостях).
++
++Лимиты:
++
++/api/auth/login — 5 запросов в минуту с одного IP (или email).
++
++Остальные /api/** (кроме health и auth) — 120 запросов в минуту на пользователя (по JWT).
++
++Эндпоинты отправки кода верификации — 3 запроса в 15 минут (если ещё не сделано на уровне сервиса).
++
++Единый формат: Настрой AuthenticationEntryPoint (для 401) и AccessDeniedHandler (для 403), чтобы они возвращали JSON в формате ApiError, а не стандартный HTML Spring Security. Для 429 (от Rate Limiter) — тоже отдавай ApiError.
++
++Тесты: Напиши интеграционные тесты (Testcontainers Redis + Postgres), которые проверяют, что 6-й запрос на логин возвращает 429 и правильный JSON.
++
++Ограничения: Не ломай существующие тесты. Код пиши в пакете security и common. Если меняешь SecurityConfig — аккуратно. Сначала предложи план, потом пиши код.
+
+# 2026-10-31T15:15:08.099Z
++y. План отличный, действуй.
++
++Уточнения:
++
++Фиксированное окно (fixed window) — ок для MVP.
++
++Лимит «3 заявки/час» и лимиты на задания/активности — откладываем, как ты и предложил. Не ломай существующие тесты.
++
++Убедись, что ApiErrorWriter используется и в RateLimitFilter (429), и в RestAuthenticationEntryPoint (401), и в RestAccessDeniedHandler (403) — чтобы формат был 100% одинаковый (timestamp, status, error, message, path).
++
++В RateLimitIT проверь, что заголовок Retry-After реально приходит при 429.
++
++После реализации обнови docs/spec/api.md (добавь 429 и Retry-After) и docs/agent-log.md.
+
+# 2026-10-31T15:24:29.468Z
++Контекст: Продолжаем. Rate Limiting и единый формат ошибок готовы. Теперь нужен модуль заявок на справки (Certificate Requests).
++
++Задачи:
++
++БД (Flyway V3): Создай миграцию V3__certificate_requests.sql.
++
++Таблица certificate_requests: id (uuid), student_id (fk на users), type (varchar: 'EDUCATION', 'INCOME', 'MILITARY'), status (varchar: 'PENDING', 'APPROVED', 'REJECTED'), rejection_reason (text, nullable), created_at, updated_at.
++
++Индексы по student_id и status.
++
++Добавь CHECK constraint на допустимые значения type и status.
++
++Сущности и Репозиторий: Создай CertificateRequest (с audit-полями через @CreationTimestamp/@UpdateTimestamp) и CertificateRequestRepository.
++
++Сервис и DTO: CertificateRequestService. DTO для создания (только type), для ответа (все поля) и для смены статуса (status, rejectionReason).
++
++Контроллеры:
++
++POST /api/certificates — студент создаёт заявку. По умолчанию статус PENDING.
++
++GET /api/certificates/my — студент видит только свои заявки.
++
++GET /api/certificates — учебная часть (ACADEMIC_OFFICE) видит все заявки (с возможностью фильтра ?status=PENDING).
++
++PATCH /api/certificates/{id}/status — учебная часть одобряет или отклоняет. Если REJECTED — rejectionReason обязателен (валидация на уровне DTO/Сервиса).
++
++Безопасность: Используй @PreAuthorize("hasRole('STUDENT')") и hasRole('ACADEMIC_OFFICE'). Студент не должен иметь доступ к общим заявкам или смене статуса (вернёт 403).
++
++Тесты: Интеграционные тесты (Testcontainers):
++
++студент создаёт и видит свою заявку;
++
++учебная часть одобряет;
++
++отклонение без причины возвращает 400;
++
++студент пытается одобрить -> 403.
++
++Документация: После реализации добавь эндпоинты в docs/spec/api.md и допиши в docs/agent-log.md.
++
++Ограничения: Используй существующий ApiError для ошибок. Тонкие контроллеры, вся логика в сервисе. Сначала предложи план, потом пиши код.
+
+# 2026-10-31T15:26:09.705Z
++y. План отличный, особенно хорошо, что заметил отсутствие @EnableMethodSecurity и порядок обработки исключений (AccessDeniedException перед catch-all). Действуй.
++
++Твои дефолты одобряю:
++
++Пагинация (Page, дефолт 20) — ок.
++
++ON DELETE CASCADE по student_id — ок.
++
++Обнуление rejectionReason при APPROVED — ок.
++
++Уточнение по коду: убедись, что в CertificateRequestView поле studentName заполняется через JOIN FETCH или @EntityGraph в репозитории (чтобы не было проблемы N+1 запроса при выводе списка).
++
++После реализации пришли результат ./mvnw verify и покажи, что старые 21 тест не сломались.
++
++
+
+# 2026-10-31T15:35:15.757Z
++Контекст: Бэкенд готов. Теперь нужно настроить Nginx как единую точку входа (reverse proxy) и раздатчик статики в docker-compose.yml. Учти, что фронтенд (React) пока в разработке, папки со сбилженной статикой (например, frontend/dist) может не быть.
++
++Задачи:
++
++Создай nginx/nginx.conf:
++
++server на порту 80.
++
++Локация /api/ должна проксироваться на http://backend:8080 (внутренний порт контейнера). Важно: передавай заголовки Authorization, X-Real-IP и X-Forwarded-For, чтобы Rate Limiting на бэкенде корректно определял IP клиента (иначе все запросы будут выглядеть как с одного IP).
++
++Локация / должна раздавать статику (например, root /usr/share/nginx/html; try_files $uri $uri/ /index.html;).
++
++Настрой client_max_body_size 10M; (на будущее для загрузки файлов).
++
++Обнови docker-compose.yml:
++
++Добавь сервис nginx (образ nginx:alpine).
++
++Пробрось порт 80:80.
++
++Примонтируй nginx/nginx.conf в /etc/nginx/conf.d/default.conf.
++
++Примонтируй папку frontend/dist (или куда Даня будет билдить фронт) в /usr/share/nginx/html. Если папки нет — создай пустую заглушку frontend/dist/index.html с текстом «Frontend is building...», чтобы Nginx не падал с 404.
++
++Убедись, что nginx зависит от backend (depends_on).
++
++Безопасность (порт бэкенда):
++
++В docker-compose.yml убери проброс порта 8080:8080 у сервиса backend наружу (оставь только expose: 8080), чтобы весь трафик шёл строго через Nginx. (Если это сломает текущие тесты или смоук — верни обратно, но напиши об этом).
++
++Healthcheck для Nginx:
++
++Добавь в compose healthcheck, который дергает curl -f http://localhost/api/actuator/health (убедись, что Nginx корректно проксирует Actuator).
++
++Документация:
++
++Добавь в docs/agent-log.md запись о настройке Nginx и изменении портов.
++
++Проверка:
++
++docker compose up -d --build.
++
++curl http://localhost/api/actuator/health должен вернуть {"status":"UP"}.
++
++curl http://localhost/ должен вернуть заглушку.
++
++Убедись, что Rate Limiting всё ещё работает (сделай 6 запросов на логин через localhost/api/auth/login — 6-й должен вернуть 429).
++
++Ограничения: Не ломай существующие 30 тестов (./mvnw verify). Если что-то идёт не так — предложи альтернативу. Сначала предложи план.
+
+# 2026-10-31T15:37:36.419Z
++y. План отличный. Особенно респект за X-Forwarded-For $remote_addr (защита от подделки IP для обхода Rate Limit) и за wget вместо curl в healthcheck (не надо тащить лишний пакет в alpine).
++
++Действуй по плану.
++
++Используй wget для healthcheck (вариант с отдельным Dockerfile — оверинжиниринг).
++
++Заглушку frontend/dist/index.html создавай и коммить, а frontend/dist/ добавим в .gitignore позже, когда Даня настроит сборку.
++
++Обязательно проверь, что разные X-Forwarded-For не обходят лимит (как ты и написал).
++
++После проверки обнови docs/agent-log.md.
+
+# 2026-11-04T09:45:09.352Z
++Контекст: Мы переходим к модулю финансов и фоновых задач. Ниже я привожу код сущностей от моего коллеги (Activity, Review, TeacherBudget), которые он скоро добавит в проект. Ознакомься с ними.
++
++⚠️ КРИТИЧЕСКИ ВАЖНО: Коллега использовал тип Long для идентификаторов пользователей (teacherId, authorId, moderatedBy). Но в нашей базе users.id — это UUID. Когда будешь писать код и миграции, используй UUID для всех внешних ключей на пользователей. В своих будущих классах ты можешь сразу писать UUID.
++
++Код сущностей:
++
++java
++// Activity.java
++package com.ptu.backend.domain;
++import jakarta.persistence.*;
++import lombok.Getter;
++import lombok.NoArgsConstructor;
++import lombok.Setter;
++import java.math.BigDecimal;
++import java.time.LocalDateTime;
++
++@Entity
++@Table(name = "activities")
++@Getter
++@Setter
++@NoArgsConstructor
++public class Activity {
++    @Id
++    @GeneratedValue(strategy = GenerationType.IDENTITY)
++    private Long id;
++    @Column(nullable = false, length = 150)
++    private String title;
++    @Enumerated(EnumType.STRING)
++    @Column(nullable = false, length = 30)
++    private ActivityType type;
++    @Enumerated(EnumType.STRING)
++    @Column(nullable = false, length = 30)
++    private ParticipationMode participationMode;
++    @Column(nullable = false)
++    private LocalDateTime startsAt;
++    @Column(nullable = false)
++    private LocalDateTime endsAt;
++    @Column(name = "required_activation_percent", nullable = false)
++    private Integer requiredActivationPercent;
++    @Column(name = "reward_boa", precision = 5, scale = 2, nullable = false)
++    private BigDecimal rewardBoa = BigDecimal.ZERO;
++    @Column(name = "reward_bua", precision = 5, scale = 2, nullable = false)
++    private BigDecimal rewardBua = BigDecimal.ZERO;
++    @Column(name = "teacher_id", nullable = false)
++    private Long teacherId; // TODO: fix to UUID
++    @Column(nullable = false)
++    private Boolean active = true;
++    @Column(name = "created_at", nullable = false, updatable = false)
++    private LocalDateTime createdAt;
++    @PrePersist
++    public void onCreate() { if (createdAt == null) createdAt = LocalDateTime.now(); }
++}
++
++// Review.java
++package com.ptu.backend.domain;
++import jakarta.persistence.*;
++import lombok.Getter;
++import lombok.NoArgsConstructor;
++import lombok.Setter;
++import java.time.LocalDateTime;
++
++@Entity
++@Table(name = "reviews", indexes = {
++    @Index(name = "idx_review_activity", columnList = "activity_id"),
++    @Index(name = "idx_review_author", columnList = "author_id"),
++    @Index(name = "idx_review_status", columnList = "status")
++})
++@Getter @Setter @NoArgsConstructor
++public class Review {
++    @Id
++    @GeneratedValue(strategy = GenerationType.IDENTITY)
++    private Long id;
++    @Column(name = "activity_id", nullable = false)
++    private Long activityId;
++    @Column(name = "author_id", nullable = false)
++    private Long authorId; // TODO: fix to UUID
++    @Column(nullable = false, length = 2000)
++    private String text;
++    @Column(name = "rating", nullable = false)
++    private Integer rating;
++    @Enumerated(EnumType.STRING)
++    @Column(nullable = false, length = 30)
++    private ReviewStatus status = ReviewStatus.PENDING_MODERATION;
++    @Column(name = "moderated_by")
++    private Long moderatedBy; // TODO: fix to UUID
++    @Column(name = "reward_awarded", nullable = false)
++    private boolean rewardAwarded = false;
++    @Column(name = "created_at", nullable = false, updatable = false)
++    private LocalDateTime createdAt;
++    @Column(name = "updated_at", nullable = false)
++    private LocalDateTime updatedAt;
++    @PrePersist
++    public void onCreate() { LocalDateTime now = LocalDateTime.now(); this.createdAt = now; this.updatedAt = now; }
++    @PreUpdate
++    public void onUpdate() { this.updatedAt = LocalDateTime.now(); }
++}
++
++// TeacherBudget.java
++package com.ptu.backend.domain;
++import jakarta.persistence.*;
++import lombok.Getter;
++import lombok.NoArgsConstructor;
++import lombok.Setter;
++import java.math.BigDecimal;
++import java.time.LocalDateTime;
++
++@Entity
++@Table(name = "teacher_budgets", indexes = {@Index(name = "idx_teacher_budget_teacher", columnList = "teacher_id", unique = true)})
++@Getter @Setter @NoArgsConstructor
++public class TeacherBudget {
++    @Id
++    @GeneratedValue(strategy = GenerationType.IDENTITY)
++    private Long id;
++    @Column(name = "teacher_id", nullable = false, unique = true)
++    private Long teacherId; // TODO: fix to UUID
++    @Column(name = "total_budget", precision = 19, scale = 2, nullable = false)
++    private BigDecimal totalBudget = BigDecimal.ZERO;
++    @Column(name = "spent_budget", precision = 19, scale = 2, nullable = false)
++    private BigDecimal spentBudget = BigDecimal.ZERO;
++    @Column(name = "created_at", nullable = false, updatable = false)
++    private LocalDateTime createdAt;
++    @Column(name = "updated_at", nullable = false)
++    private LocalDateTime updatedAt;
++    @PrePersist
++    public void onCreate() { LocalDateTime now = LocalDateTime.now(); this.createdAt = now; this.updatedAt = now; }
++    @PreUpdate
++    public void onUpdate() { this.updatedAt = LocalDateTime.now(); }
++    public BigDecimal getAvailableBudget() { return totalBudget.subtract(spentBudget); }
++}
++Твои задачи:
++
++БД (Flyway V4): Создай миграцию V4__wallets_and_transactions.sql. Таблица wallets (id UUID, user_id UUID UNIQUE FK на users, currency_balance numeric, created_at, updated_at). Таблица transactions (id UUID, wallet_id UUID FK, amount numeric, type varchar, idempotency_key varchar UNIQUE, created_at).
++
++Сервис WalletService: Создай сущности Wallet и Transaction. Реализуй метод credit(UUID userId, BigDecimal amount, String type, String idempotencyKey) с проверкой idempotency_key на дубли.
++
++Планировщик (Scheduler):
++
++Включи @EnableScheduling.
++
++Создай ScheduledTasks с методом @Scheduled(cron = "0 0 * * * *") processApprovedReviews(). Он должен находить в таблице Review отзывы со статусом APPROVED и rewardAwarded = false, начислять валюту автору через WalletService, ставить rewardAwarded = true. Важно: нужно учесть лимит «не более 5 отзывов в месяц на пользователя» (проверяй по дате создания транзакций или по дате отзывов).
++
++Создай заглушку @Scheduled(cron = "0 0 1 1 * *") processMonthlyConversion() с логированием.
++
++Тесты:
++
++Тест на idempotency_key (дважды вызываем credit с одним ключом — баланс меняется один раз).
++
++Тест на планировщик: создаем одобренный отзыв, запускаем метод, проверяем, что баланс вырос, а флаг стал true.
++
++Ограничения: Не трогай файлы коллеги, если их нет в проекте. Просто создай свои классы так, чтобы они работали с его таблицами. Сначала предложи план.
+
+# 2026-11-04T09:47:01.304Z
++y/A. План отличный. Особенно респект за JdbcTemplate вместо дублирования сущности Review и за пессимистичную блокировку (FOR UPDATE).
++
++Делаем Вариант А (ничего за коллегу не мигрируем). Тестовый стаб reviews-stub.sql — отличная идея для изоляции тестов.
++
++Дополнительно: в этом же этапе добавь задачу на "просрочки" (overdue), которую мы обсуждали:
++
++В ScheduledTasks добавь метод @Scheduled(cron = "0 0 * * * *") processOverdueTasks().
++
++Внутри (через JdbcTemplate или существующие репозитории): найди teacher_invites, у которых expires_at < now() и статус PENDING, и поменяй им статус на EXPIRED.
++
++Напиши на это простой тест.
++
++Приступай, сначала напиши код, потом покажи результаты ./mvnw verify.
