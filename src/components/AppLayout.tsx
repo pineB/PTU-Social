@@ -2,21 +2,26 @@ import { useState, type ReactNode } from 'react';
 import {
   AppBar,
   Avatar,
-  Badge,
   Box,
   Button,
+  Divider,
   Drawer,
   IconButton,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  Menu,
+  MenuItem,
   Toolbar,
   Tooltip,
   Typography,
 } from '@mui/material';
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
 import NotificationsNoneRoundedIcon from '@mui/icons-material/NotificationsNoneRounded';
+import AssignmentTurnedInRoundedIcon from '@mui/icons-material/AssignmentTurnedInRounded';
+import RateReviewRoundedIcon from '@mui/icons-material/RateReviewRounded';
+import DescriptionRoundedIcon from '@mui/icons-material/DescriptionRounded';
 import SpaceDashboardRoundedIcon from '@mui/icons-material/SpaceDashboardRounded';
 import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded';
 import LightModeRoundedIcon from '@mui/icons-material/LightModeRounded';
@@ -31,6 +36,8 @@ import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded';
 import AccountBalanceWalletRoundedIcon from '@mui/icons-material/AccountBalanceWalletRounded';
 import SportsEsportsRoundedIcon from '@mui/icons-material/SportsEsportsRounded';
 import WorkspacePremiumRoundedIcon from '@mui/icons-material/WorkspacePremiumRounded';
+import Inventory2RoundedIcon from '@mui/icons-material/Inventory2Rounded';
+import ArticleRoundedIcon from '@mui/icons-material/ArticleRounded';
 import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import EmojiEventsRoundedIcon from '@mui/icons-material/EmojiEventsRounded';
@@ -38,6 +45,7 @@ import LeaderboardRoundedIcon from '@mui/icons-material/LeaderboardRounded';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { dashboards, type RoleId } from '../data/dashboards';
 import { useCampusWorkflow } from '../data/campus-workflow';
+import { useTaskWorkflow } from '../data/task-workflow';
 import { useColorMode } from '../theme/ColorModeProvider';
 
 const drawerWidth = 272;
@@ -48,6 +56,14 @@ const navigation: { id: RoleId; label: string }[] = [
   { id: 'organizer', label: 'Организатор' },
   { id: 'academic-office', label: 'Учебная часть' },
 ];
+
+interface HeaderNotification {
+  id: string;
+  title: string;
+  description: string;
+  to: string;
+  icon: ReactNode;
+}
 
 function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () => void }) {
   const location = useLocation();
@@ -175,20 +191,16 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
               <ListItemIcon className="role-icon"><GroupsRoundedIcon /></ListItemIcon>
               <ListItemText primary="Заявки группы" primaryTypographyProps={{ fontWeight: location.pathname === '/student/group-confirmation' ? 700 : 600, fontSize: 14 }} />
             </ListItemButton>}
-            <ListItemButton component={NavLink} to="/student/wallet" onClick={onNavigate} className={`role-link${isActive('/student/wallet') ? ' role-link-active' : ''}`} aria-label="Кошелёк" aria-current={isActive('/student/wallet') ? 'page' : undefined}>
-              <ListItemIcon className="role-icon"><AccountBalanceWalletRoundedIcon /></ListItemIcon>
-              <ListItemText primary="Кошелёк" primaryTypographyProps={{ fontWeight: location.pathname === '/student/wallet' ? 700 : 600, fontSize: 14 }} />
-            </ListItemButton>
-            <ListItemButton component={NavLink} to="/student/battle-pass" onClick={onNavigate} className={`role-link${isActive('/student/battle-pass') ? ' role-link-active' : ''}`} aria-label="Батл-пасс" aria-current={isActive('/student/battle-pass') ? 'page' : undefined}>
+            <ListItemButton component={NavLink} to="/student/battle-pass" onClick={onNavigate} className={`role-link${isActive('/student/battle-pass') ? ' role-link-active' : ''}`} aria-label="ПТУ-пасс" aria-current={isActive('/student/battle-pass') ? 'page' : undefined}>
               <ListItemIcon className="role-icon"><SportsEsportsRoundedIcon /></ListItemIcon>
-              <ListItemText primary="Батл-пасс" primaryTypographyProps={{ fontWeight: location.pathname === '/student/battle-pass' ? 700 : 600, fontSize: 14 }} />
+              <ListItemText primary="ПТУ-пасс" primaryTypographyProps={{ fontWeight: location.pathname === '/student/battle-pass' ? 700 : 600, fontSize: 14 }} />
             </ListItemButton>
             <ListItemButton component={NavLink} to="/student/inventory" onClick={onNavigate} className={`role-link${isActive('/student/inventory') ? ' role-link-active' : ''}`} aria-label="Инвентарь" aria-current={isActive('/student/inventory') ? 'page' : undefined}>
-              <ListItemIcon className="role-icon"><WorkspacePremiumRoundedIcon /></ListItemIcon>
+              <ListItemIcon className="role-icon"><Inventory2RoundedIcon /></ListItemIcon>
               <ListItemText primary="Инвентарь" primaryTypographyProps={{ fontWeight: location.pathname === '/student/inventory' ? 700 : 600, fontSize: 14 }} />
             </ListItemButton>
             <ListItemButton component={NavLink} to="/student/certificates" onClick={onNavigate} className={`role-link${isActive('/student/certificates') ? ' role-link-active' : ''}`} aria-label="Справки" aria-current={isActive('/student/certificates') ? 'page' : undefined}>
-              <ListItemIcon className="role-icon"><WorkspacePremiumRoundedIcon /></ListItemIcon>
+              <ListItemIcon className="role-icon"><ArticleRoundedIcon /></ListItemIcon>
               <ListItemText primary="Справки" primaryTypographyProps={{ fontWeight: location.pathname === '/student/certificates' ? 700 : 600, fontSize: 14 }} />
             </ListItemButton>
           </>
@@ -216,6 +228,7 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
 
 export default function AppLayout({ children }: { children?: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [notificationAnchor, setNotificationAnchor] = useState<HTMLElement | null>(null);
   const location = useLocation();
   const role = navigation.find(({ id }) => location.pathname.startsWith(`/${id}`))?.id ?? 'student';
   const profile = dashboards[role];
@@ -227,7 +240,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
     '/student/events': 'Мероприятия',
     '/student/group-confirmation': 'Заявки студентов группы',
     '/student/wallet': 'Кошелёк',
-    '/student/battle-pass': 'Батл-пасс',
+    '/student/battle-pass': 'ПТУ-пасс',
     '/student/inventory': 'Инвентарь',
     '/student/certificates': 'Справки',
     '/teacher/submissions': 'Сдачи студентов',
@@ -246,9 +259,82 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
     .join('');
   const closeMobile = () => setMobileOpen(false);
   const { mode, toggleMode } = useColorMode();
-  const { walletBalance } = useCampusWorkflow();
+  const { assignments, submissions } = useTaskWorkflow();
+  const { walletBalance, isGroupLeader, groupConfirmations, events, certificateRequests } = useCampusWorkflow();
   const ModeIcon = mode === 'dark' ? LightModeRoundedIcon : DarkModeRoundedIcon;
   const modeLabel = mode === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему';
+  const notifications: HeaderNotification[] = [];
+
+  if (role === 'student') {
+    assignments.filter((assignment) => assignment.status === 'submitted').forEach((assignment) => {
+      notifications.push({
+        id: `assignment-${assignment.id}`,
+        title: 'Работа на проверке',
+        description: assignment.title,
+        to: '/student/tasks',
+        icon: <AssignmentTurnedInRoundedIcon />,
+      });
+    });
+    events.filter((event) => new Date(event.endsAt).getTime() < Date.now()).forEach((event) => {
+      const participant = event.participants.find((item) => item.studentName === profile.profileName && item.participationConfirmed);
+      const hasReview = event.reviews.some((review) => review.studentName === profile.profileName);
+      if (participant && !hasReview) {
+        notifications.push({
+          id: `review-${event.id}`,
+          title: 'Можно оставить отзыв',
+          description: event.title,
+          to: '/student/events',
+          icon: <RateReviewRoundedIcon />,
+        });
+      }
+    });
+    if (isGroupLeader) {
+      const pendingCount = groupConfirmations.filter((confirmation) => confirmation.status === 'pending').length;
+      if (pendingCount > 0) {
+        notifications.push({
+          id: 'group-confirmations',
+          title: 'Заявки на вступление в группу',
+          description: `Ожидают решения: ${pendingCount}`,
+          to: '/student/group-confirmation',
+          icon: <GroupsRoundedIcon />,
+        });
+      }
+    }
+  } else if (role === 'teacher') {
+    submissions.filter((submission) => submission.status === 'submitted').forEach((submission) => {
+      notifications.push({
+        id: `submission-${submission.id}`,
+        title: 'Новая работа на проверку',
+        description: `${submission.studentName} · ${submission.assignmentTitle}`,
+        to: '/teacher/submissions',
+        icon: <FactCheckRoundedIcon />,
+      });
+    });
+  } else if (role === 'organizer') {
+    events.filter((event) => event.createdBy === profile.profileName && new Date(event.endsAt).getTime() < Date.now()).forEach((event) => {
+      const pendingParticipants = event.participants.filter((participant) => participant.awardedPoints === undefined);
+      if (pendingParticipants.length > 0) {
+        notifications.push({
+          id: `awards-${event.id}`,
+          title: 'Начислите баллы участникам',
+          description: `${event.title} · ${pendingParticipants.length} участников`,
+          to: '/organizer/events',
+          icon: <WorkspacePremiumRoundedIcon />,
+        });
+      }
+    });
+  } else {
+    certificateRequests.filter((request) => request.status === 'Подана').forEach((request) => {
+      notifications.push({
+        id: `certificate-${request.id}`,
+        title: 'Новая заявка на справку',
+        description: `${request.studentName} · ${request.type}`,
+        to: '/academic-office/certificates',
+        icon: <DescriptionRoundedIcon />,
+      });
+    });
+  }
+  const visibleNotifications = notifications.slice(0, 6);
 
   return (
     <Box className="app-shell">
@@ -281,7 +367,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
             >
               <MenuRoundedIcon />
             </IconButton>
-            <Typography className="topbar-page-title" fontSize={14} fontWeight={650} color="text.secondary" sx={{ flexGrow: 1 }}>
+            <Typography className="topbar-page-title" fontSize={14} fontWeight={650} color="text.secondary" sx={{ flexGrow: 1, minWidth: 0 }}>
               {pageTitle}
             </Typography>
             {role === 'student' && (
@@ -296,22 +382,34 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
                 <span className="topbar-balance-unit">жетонов</span>
               </Button>
             )}
-            <Tooltip title={modeLabel}>
-              <IconButton
-                aria-label={modeLabel}
-                onClick={toggleMode}
-                className="theme-toggle"
-              >
-                <ModeIcon />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Уведомления">
-              <IconButton aria-label="Уведомления" className="notification-button">
-                <Badge color="error" variant="dot" overlap="circular">
+            <Box className="topbar-actions">
+              <Tooltip title={modeLabel}>
+                <IconButton
+                  aria-label={modeLabel}
+                  onClick={toggleMode}
+                  className="theme-toggle"
+                >
+                  <ModeIcon />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Уведомления">
+                <IconButton
+                  aria-label={`Уведомления: ${notifications.length}`}
+                  aria-controls={notificationAnchor ? 'header-notifications-menu' : undefined}
+                  aria-haspopup="menu"
+                  aria-expanded={notificationAnchor ? 'true' : undefined}
+                  onClick={(event) => setNotificationAnchor(event.currentTarget)}
+                  className="notification-button"
+                >
                   <NotificationsNoneRoundedIcon />
-                </Badge>
-              </IconButton>
-            </Tooltip>
+                  {notifications.length > 0 && (
+                    <Box component="span" className="notification-count">
+                      {notifications.length > 9 ? '9+' : notifications.length}
+                    </Box>
+                  )}
+                </IconButton>
+              </Tooltip>
+            </Box>
             {role === 'student' ? (
               <Button component={NavLink} to="/student/profile" className="topbar-user" aria-label={`Профиль: ${profile.profileName}`}>
                 <Avatar className="topbar-avatar">{profileInitials}</Avatar>
@@ -321,16 +419,52 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
                 </Box>
               </Button>
             ) : (
-              <Box className="topbar-user topbar-user-static" aria-label={profile.profileName}>
+              <Box className="topbar-user topbar-user-static" aria-label={`${profile.profileName}, ${profile.profileCaption}`}>
                 <Avatar className="topbar-avatar">{profileInitials}</Avatar>
                 <Box className="topbar-user-copy">
                   <Typography variant="body2" fontWeight={700} noWrap>{profile.profileName}</Typography>
-                  <Typography variant="caption" color="text.secondary" noWrap>{profile.profileCaption}</Typography>
                 </Box>
               </Box>
             )}
           </Toolbar>
         </AppBar>
+        <Menu
+          id="header-notifications-menu"
+          anchorEl={notificationAnchor}
+          open={notificationAnchor !== null}
+          onClose={() => setNotificationAnchor(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          className="notifications-menu"
+          MenuListProps={{ 'aria-label': 'Список уведомлений' }}
+        >
+          <Box className="notifications-menu-heading">
+            <Typography fontWeight={750}>Уведомления</Typography>
+            <Typography variant="caption" color="text.secondary">{notifications.length}</Typography>
+          </Box>
+          <Divider />
+          {visibleNotifications.length > 0 ? visibleNotifications.map((notification) => (
+            <MenuItem
+              key={notification.id}
+              component={NavLink}
+              to={notification.to}
+              onClick={() => setNotificationAnchor(null)}
+              className="notification-menu-item"
+            >
+              <ListItemIcon>{notification.icon}</ListItemIcon>
+              <ListItemText
+                primary={notification.title}
+                secondary={notification.description}
+                primaryTypographyProps={{ fontWeight: 700, fontSize: 13 }}
+                secondaryTypographyProps={{ fontSize: 12 }}
+              />
+            </MenuItem>
+          )) : (
+            <Typography className="notifications-empty" color="text.secondary">
+              Новых уведомлений нет
+            </Typography>
+          )}
+        </Menu>
         <Box component="main" className="page-content">
           {children ?? <Outlet />}
         </Box>

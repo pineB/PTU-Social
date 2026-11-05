@@ -189,7 +189,7 @@ export function StudentDashboard() {
       value: metric.label === 'Академический рейтинг' ? String(academicRating)
         : metric.label === 'Учебная активность' ? String(buaPoints)
           : metric.label === 'Общественная активность' ? String(boaPoints)
-            : metric.label === 'Батл-пасс' ? `${level} ур.`
+            : metric.label === 'ПТУ-пасс' ? `${level} ур.`
               : metric.value,
     })),
   };

@@ -101,6 +101,7 @@ function AssignmentSubmissionForm({ assignment, onClose }: { assignment: Assignm
           multiline
           minRows={3}
           fullWidth
+          InputLabelProps={{ shrink: true }}
         />
         <Button
           component="label"
@@ -121,11 +122,11 @@ function AssignmentSubmissionForm({ assignment, onClose }: { assignment: Assignm
           Максимальная награда — {assignment.maxPoints} АР
         </Typography>
         {error && <Alert severity="error">{error}</Alert>}
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2}>
+        <Stack direction="row" spacing={1.2} className="assignment-form-actions">
           <Button type="submit" variant="contained" disabled={isLoading} startIcon={isLoading ? <CircularProgress size={18} color="inherit" /> : <CloudUploadRoundedIcon />} fullWidth>
             {isLoading ? 'Отправляем…' : assignment.status === 'in_progress' ? 'Сдать работу' : 'Отправить повторно'}
           </Button>
-          <Button type="button" color="inherit" disabled={isLoading} onClick={onClose}>Отмена</Button>
+          <Button type="button" variant="outlined" color="inherit" disabled={isLoading} onClick={onClose} className="assignment-cancel-button">Отмена</Button>
         </Stack>
       </Stack>
     </form>

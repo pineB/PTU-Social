@@ -88,9 +88,17 @@ export interface InventoryItem {
   id: string;
   name: string;
   kind: 'case' | 'cosmetic';
+  cosmeticType?: 'avatar' | 'avatar-frame' | 'profile-background' | 'badge';
   rarity?: 'Обычный' | 'Редкий' | 'Эпический';
   source: string;
   obtainedAt: string;
+}
+
+export interface CampusCaseReward {
+  name: string;
+  cosmeticType: NonNullable<InventoryItem['cosmeticType']>;
+  rarity: NonNullable<InventoryItem['rarity']>;
+  chance: number;
 }
 
 export interface CertificateRequest {
@@ -102,6 +110,10 @@ export interface CertificateRequest {
   deliveryMethod: 'В учебной части' | 'Электронно';
   status: 'Подана' | 'В обработке' | 'Готова' | 'Выдана' | 'Отклонена' | 'Отменена';
   createdAt: string;
+  electronicDocument?: {
+    fileName: string;
+    dataUrl: string;
+  };
 }
 
 export interface ScheduleEntry {
@@ -156,8 +168,10 @@ interface CampusWorkflowValue {
   purchasePremiumPass: () => Promise<void>;
   claimPassReward: (rewardId: string) => Promise<void>;
   openCase: (caseId: string) => Promise<InventoryItem>;
+  completeCaseOpening: (item: InventoryItem) => void;
   submitCertificateRequest: (type: string, comment: string, deliveryMethod: CertificateRequest['deliveryMethod']) => Promise<void>;
   updateCertificateStatus: (id: string, status: CertificateRequest['status']) => Promise<void>;
+  uploadCertificateDocument: (id: string, document: NonNullable<CertificateRequest['electronicDocument']>) => Promise<void>;
   createScheduleEntry: (entry: Omit<ScheduleEntry, 'id'>) => Promise<void>;
 }
 
@@ -190,9 +204,9 @@ const initialTransactions: WalletTransaction[] = [
 ];
 
 const initialInventory: InventoryItem[] = [
-  { id: 'case-1', name: 'Кейс кампуса', kind: 'case', source: 'Батл-пасс · уровень 30', obtainedAt: '2026-10-24T18:05:00+03:00' },
+  { id: 'case-1', name: 'Кейс кампуса', kind: 'case', source: 'ПТУ-пасс · уровень 30', obtainedAt: '2026-10-24T18:05:00+03:00' },
   { id: 'item-1', name: 'Аватар «Неоновый пиксель»', kind: 'cosmetic', rarity: 'Редкий', source: 'Кейс кампуса', obtainedAt: '2026-10-24T18:05:00+03:00' },
-  { id: 'item-2', name: 'Фон профиля «Ночной город»', kind: 'cosmetic', rarity: 'Обычный', source: 'Батл-пасс · уровень 3', obtainedAt: '2026-10-18T12:00:00+03:00' },
+  { id: 'item-2', name: 'Фон профиля «Ночной город»', kind: 'cosmetic', rarity: 'Обычный', source: 'ПТУ-пасс · уровень 3', obtainedAt: '2026-10-18T12:00:00+03:00' },
 ];
 
 const initialPassRewards: PassReward[] = [
@@ -211,6 +225,24 @@ const initialPassRewards: PassReward[] = [
 ];
 
 export const caseOpeningPrice = 200;
+export const campusCaseRewards: CampusCaseReward[] = [
+  { name: 'Аватар «Первая пара»', cosmeticType: 'avatar', rarity: 'Обычный', chance: 25 },
+  { name: 'Аватар «Неоновый пиксель»', cosmeticType: 'avatar', rarity: 'Редкий', chance: 25 },
+  { name: 'Рамка профиля «Лазурь»', cosmeticType: 'avatar-frame', rarity: 'Редкий', chance: 20 },
+  { name: 'Фон профиля «Ночной город»', cosmeticType: 'profile-background', rarity: 'Эпический', chance: 15 },
+  { name: 'Фон профиля «Пиксельный кампус»', cosmeticType: 'profile-background', rarity: 'Редкий', chance: 10 },
+  { name: 'Рамка профиля «Золотая эмблема»', cosmeticType: 'avatar-frame', rarity: 'Эпический', chance: 5 },
+];
+
+export function chooseCampusCaseReward(): CampusCaseReward {
+  let roll = Math.random() * campusCaseRewards.reduce((total, reward) => total + reward.chance, 0);
+  for (const reward of campusCaseRewards) {
+    if (roll < reward.chance) return reward;
+    roll -= reward.chance;
+  }
+  throw new Error('В кейсе не настроены награды.');
+}
+
 export const campusGroups = [
   { name: 'ИС-24', size: 24 },
   { name: 'ИС-23', size: 22 },
@@ -518,7 +550,7 @@ export function CampusWorkflowProvider({ children }: { children: ReactNode }) {
       name: reward.title,
       kind: reward.rewardKind,
       ...(reward.rewardKind === 'cosmetic' ? { rarity: 'Редкий' as const } : {}),
-      source: `Батл-пасс · уровень ${reward.level}`,
+      source: `ПТУ-пасс · уровень ${reward.level}`,
       obtainedAt,
     }, ...current]);
   }, [academicRating, passRewards, premiumPassOwned]);
@@ -531,25 +563,32 @@ export function CampusWorkflowProvider({ children }: { children: ReactNode }) {
       const caseItem = inventory.find((item) => item.id === caseId && item.kind === 'case');
       if (!caseItem) throw new Error('Кейс отсутствует в инвентаре или уже открыт.');
       if (walletBalance < caseOpeningPrice) throw new Error(`Для открытия кейса нужно ${caseOpeningPrice} жетонов.`);
-      const rewards: Omit<InventoryItem, 'id' | 'obtainedAt'>[] = [
-        { name: 'Аватар «Неоновый пиксель»', kind: 'cosmetic', rarity: 'Редкий', source: 'Кейс кампуса' },
-        { name: 'Значок «Первая пара»', kind: 'cosmetic', rarity: 'Обычный', source: 'Кейс кампуса' },
-        { name: 'Фон профиля «Ночной город»', kind: 'cosmetic', rarity: 'Эпический', source: 'Кейс кампуса' },
-      ];
-      const reward = rewards[Math.floor(Math.random() * rewards.length)];
+      const reward = chooseCampusCaseReward();
       const obtainedAt = formatNow();
-      const item: InventoryItem = { ...reward, id: `item-${Date.now()}`, obtainedAt };
+      const item: InventoryItem = {
+        ...reward,
+        kind: 'cosmetic',
+        source: 'Кейс кампуса',
+        id: `item-${Date.now()}`,
+        obtainedAt,
+      };
       setWalletBalance((current) => current - caseOpeningPrice);
       setTransactions((current) => [
         { id: `wallet-case-${item.id}`, title: 'Открытие кейса', detail: caseItem.name, amount: -caseOpeningPrice, createdAt: obtainedAt },
         ...current,
       ]);
-      setInventory((current) => [item, ...current.filter((inventoryItem) => inventoryItem.id !== caseId)]);
+      setInventory((current) => current.filter((inventoryItem) => inventoryItem.id !== caseId));
       return item;
     } finally {
       caseOpeningLock.current = false;
     }
   }, [inventory, walletBalance]);
+
+  const completeCaseOpening = useCallback((item: InventoryItem) => {
+    setInventory((current) => current.some((inventoryItem) => inventoryItem.id === item.id)
+      ? current
+      : [item, ...current]);
+  }, []);
 
   const submitCertificateRequest = useCallback(async (type: string, comment: string, deliveryMethod: CertificateRequest['deliveryMethod']) => {
     await mockRequest();
@@ -576,6 +615,20 @@ export function CampusWorkflowProvider({ children }: { children: ReactNode }) {
       throw new Error(`Нельзя изменить статус «${request.status}» на «${status}».`);
     }
     setCertificateRequests((current) => current.map((item) => item.id === id ? { ...item, status } : item));
+  }, [certificateRequests]);
+
+  const uploadCertificateDocument = useCallback(async (id: string, document: NonNullable<CertificateRequest['electronicDocument']>) => {
+    await mockRequest();
+    const request = certificateRequests.find((item) => item.id === id);
+    if (!request) throw new Error('Заявка на справку не найдена.');
+    if (request.deliveryMethod !== 'Электронно') throw new Error('Загрузить электронный файл можно только для электронной справки.');
+    if (request.status !== 'В обработке') throw new Error('Переведите заявку в обработку перед загрузкой справки.');
+    if (!document.fileName.trim() || !document.dataUrl.startsWith('data:application/pdf;base64,')) {
+      throw new Error('Загрузите файл справки в формате PDF.');
+    }
+    setCertificateRequests((current) => current.map((item) => item.id === id
+      ? { ...item, electronicDocument: document, status: 'Готова' }
+      : item));
   }, [certificateRequests]);
 
   const createScheduleEntry = useCallback(async (entry: Omit<ScheduleEntry, 'id'>) => {
@@ -631,8 +684,10 @@ export function CampusWorkflowProvider({ children }: { children: ReactNode }) {
     purchasePremiumPass,
     claimPassReward,
     openCase,
+    completeCaseOpening,
     submitCertificateRequest,
     updateCertificateStatus,
+    uploadCertificateDocument,
     createScheduleEntry,
   };
 

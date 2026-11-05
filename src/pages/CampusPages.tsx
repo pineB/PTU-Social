@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   Alert,
   Avatar,
@@ -28,7 +28,7 @@ import ScheduleRoundedIcon from '@mui/icons-material/ScheduleRounded';
 import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
 import PersonAddAltRoundedIcon from '@mui/icons-material/PersonAddAltRounded';
 import { Link, useLocation } from 'react-router-dom';
-import { campusGroups, caseOpeningPrice, useCampusWorkflow, type CampusEvent, type CertificateRequest, type InventoryItem, type PassReward, type ScheduleEntry } from '../data/campus-workflow';
+import { campusGroups, campusCaseRewards, caseOpeningPrice, chooseCampusCaseReward, useCampusWorkflow, type CampusEvent, type CertificateRequest, type InventoryItem, type PassReward, type ScheduleEntry } from '../data/campus-workflow';
 
 function PageHeader({ title, children }: { title: string; children?: ReactNode }) {
   return (
@@ -820,9 +820,9 @@ export function WalletPage() {
       <Card className="wallet-balance-card">
         <CardContent>
           <AccountBalanceWalletRoundedIcon />
-          <Typography variant="body2" mt={1} sx={{ opacity: 0.8 }}>Доступный баланс</Typography>
+          <Typography variant="body2" color="text.secondary" mt={1}>Доступный баланс</Typography>
           <Typography variant="h3" fontWeight={750}>{walletBalance.toLocaleString('ru-RU')}</Typography>
-          <Typography variant="body2" sx={{ opacity: 0.8 }}>жетонов кампуса</Typography>
+          <Typography variant="body2" color="text.secondary">жетонов кампуса</Typography>
         </CardContent>
       </Card>
       <SectionCard title="История операций" icon={<AccountBalanceWalletRoundedIcon />}>
@@ -836,7 +836,7 @@ export function WalletPage() {
                 <Typography fontWeight={650}>{transaction.title}</Typography>
                 <Typography variant="caption" color="text.secondary">{transaction.detail} · {formatDate(transaction.createdAt)}</Typography>
               </Box>
-              <Typography fontWeight={700} color={transaction.amount < 0 ? 'text.primary' : 'success.main'}>{transaction.amount > 0 ? '+' : ''}{transaction.amount}</Typography>
+              <Typography fontWeight={700} color={transaction.amount < 0 ? 'text.primary' : 'primary.main'}>{transaction.amount > 0 ? '+' : ''}{transaction.amount}</Typography>
             </Stack>
           ))}
         </Stack>
@@ -847,25 +847,41 @@ export function WalletPage() {
 
 const premiumPassPrice = 500;
 
-function InventoryCard({ item, onOpen, isOpening, canAfford }: { item: InventoryItem; onOpen?: (item: InventoryItem) => void; isOpening?: boolean; canAfford: boolean }) {
+function InventoryCard({ item, onOpen, isOpening, canAfford, showRewards, onToggleRewards }: {
+  item: InventoryItem;
+  onOpen: (item: InventoryItem) => void;
+  isOpening: boolean;
+  canAfford: boolean;
+  showRewards: boolean;
+  onToggleRewards: () => void;
+}) {
   return (
     <Card className="inventory-item">
       <CardContent>
         <Avatar className={`inventory-item-icon${item.kind === 'case' ? ' inventory-case-icon' : ''}`}><CardGiftcardRoundedIcon /></Avatar>
-        {item.kind === 'case' ? (
-          <Chip size="small" label="Не открыт" className="rarity-chip subtle-chip" />
-        ) : item.rarity ? (
-          <Chip size="small" label={item.rarity} className={`rarity-chip rarity-${item.rarity === 'Эпический' ? 'epic' : item.rarity === 'Редкий' ? 'rare' : 'common'}`} />
-        ) : null}
+        <Chip size="small" label="Кейс" className="rarity-chip subtle-chip" />
         <Typography fontWeight={700} mt={1}>{item.name}</Typography>
         <Typography variant="caption" color="text.secondary">{item.source}</Typography>
-        {item.kind === 'case' && onOpen && (
-          <>
-            <Button fullWidth variant="contained" sx={{ mt: 1.5 }} disabled={isOpening || !canAfford} onClick={() => onOpen(item)}>
-              {isOpening ? <CircularProgress size={18} color="inherit" /> : `Открыть · ${caseOpeningPrice} жетонов`}
-            </Button>
-            {!canAfford && <Typography variant="caption" color="error">Недостаточно жетонов</Typography>}
-          </>
+        <Button fullWidth variant="text" sx={{ mt: 1 }} onClick={onToggleRewards}>
+          {showRewards ? 'Скрыть награды' : 'Показать награды'}
+        </Button>
+        <Button fullWidth variant="contained" disabled={isOpening || !canAfford} onClick={() => onOpen(item)}>
+          {isOpening ? <CircularProgress size={18} color="inherit" /> : `Открыть · ${caseOpeningPrice} жетонов`}
+        </Button>
+        {!canAfford && <Typography variant="caption" color="error">Недостаточно жетонов</Typography>}
+        {showRewards && (
+          <Box className="case-reward-list">
+            <Typography variant="subtitle2" fontWeight={750}>Содержимое кейса</Typography>
+            {campusCaseRewards.map((reward) => (
+              <Box className="case-reward-row" key={reward.name}>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography variant="body2" fontWeight={650}>{reward.name}</Typography>
+                  <Typography variant="caption" color="text.secondary">{reward.cosmeticType === 'avatar' ? 'Аватар' : reward.cosmeticType === 'avatar-frame' ? 'Рамка профиля' : reward.cosmeticType === 'profile-background' ? 'Фон профиля' : 'Значок'} · {reward.rarity}</Typography>
+                </Box>
+                <Chip size="small" label={`${reward.chance}%`} className={`rarity-chip rarity-${reward.rarity === 'Эпический' ? 'epic' : reward.rarity === 'Редкий' ? 'rare' : 'common'}`} />
+              </Box>
+            ))}
+          </Box>
         )}
       </CardContent>
     </Card>
@@ -877,10 +893,25 @@ export function BattlePassPage() {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState('');
   const actionLock = useRef(false);
+  const battlePassLevelsRef = useRef<HTMLDivElement>(null);
+  const currentLevelRef = useRef<HTMLDivElement>(null);
   const currentLevel = Math.min(50, Math.floor(passExperience / 20));
   const progressInLevel = currentLevel >= 50 ? 20 : passExperience % 20;
   const needed = currentLevel >= 50 ? 0 : 20 - progressInLevel;
   const progressPercent = currentLevel >= 50 ? 100 : (progressInLevel / 20) * 100;
+
+  useLayoutEffect(() => {
+    const scrollContainer = battlePassLevelsRef.current;
+    const currentLevelElement = currentLevelRef.current;
+    if (!scrollContainer || !currentLevelElement) return;
+    const levelLeft = currentLevelElement.getBoundingClientRect().left
+      - scrollContainer.getBoundingClientRect().left
+      + scrollContainer.scrollLeft;
+    scrollContainer.scrollTo({
+      left: levelLeft - (scrollContainer.clientWidth - currentLevelElement.clientWidth) / 2,
+      behavior: 'auto',
+    });
+  }, [currentLevel]);
 
   async function handlePurchase() {
     if (actionLock.current) return;
@@ -914,14 +945,14 @@ export function BattlePassPage() {
 
   return (
     <Box className="campus-page">
-      <PageHeader title="Батл-пасс">
+      <PageHeader title="ПТУ-пасс">
       </PageHeader>
       <Card className="battle-pass-hero">
         <CardContent>
           <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} gap={2}>
             <Box>
               <Typography variant="overline">СЕЗОН 2026/27</Typography>
-              <Typography variant="h3" fontWeight={750}>Уровень {currentLevel} / 50</Typography>
+              <Typography variant="h3" className="battle-pass-level-title" fontWeight={750}>Уровень {currentLevel} / 50</Typography>
               <Typography>{currentLevel >= 50 ? 'Максимальный уровень сезона' : `Ещё ${needed} АР до следующего уровня`}</Typography>
             </Box>
             <Box className="battle-pass-progress">
@@ -940,7 +971,7 @@ export function BattlePassPage() {
             </Button>
           )}
         </Stack>
-        <Box className="battle-pass-layout" aria-label="Все 50 уровней батл-пасса">
+        <Box className="battle-pass-layout" aria-label="Все 50 уровней ПТУ-пасса">
           <Box className="battle-pass-legend" aria-hidden="true">
             <Box className="battle-pass-legend-spacer" />
             <Box className="battle-pass-legend-lane battle-pass-legend-free">
@@ -950,13 +981,17 @@ export function BattlePassPage() {
               <Typography variant="caption" fontWeight={750}>Премиум</Typography>
             </Box>
           </Box>
-          <Box className="battle-pass-levels">
+          <Box className="battle-pass-levels" ref={battlePassLevelsRef}>
             {Array.from({ length: 50 }, (_, index) => {
               const level = index + 1;
               const freeReward = passRewards.find((reward) => reward.track === 'free' && reward.level === level);
               const premiumReward = passRewards.find((reward) => reward.track === 'premium' && reward.level === level);
               return (
-                <Box className={`battle-pass-level${level <= currentLevel ? ' battle-pass-level-current' : ''}`} key={level}>
+                <Box
+                  className={`battle-pass-level${level <= currentLevel ? ' battle-pass-level-current' : ''}`}
+                  key={level}
+                  ref={level === Math.max(currentLevel, 1) ? currentLevelRef : undefined}
+                >
                   <Typography variant="caption" fontWeight={750}>Ур. {level}</Typography>
                   {([
                     { reward: freeReward, track: 'free' as const },
@@ -988,16 +1023,27 @@ export function BattlePassPage() {
 }
 
 export function InventoryPage() {
-  const { inventory, openCase, walletBalance } = useCampusWorkflow();
+  const { inventory, openCase, completeCaseOpening, walletBalance } = useCampusWorkflow();
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [openedItem, setOpenedItem] = useState<InventoryItem | null>(null);
-  const [rouletteItems, setRouletteItems] = useState<Array<{ name: string; rarity: InventoryItem['rarity']; isPrize: boolean }>>([]);
+  const [rouletteItems, setRouletteItems] = useState<Array<{ name: string; rarity?: InventoryItem['rarity']; isPrize: boolean }>>([]);
   const [rouletteOffset, setRouletteOffset] = useState(0);
   const [rouletteStopped, setRouletteStopped] = useState(false);
   const [error, setError] = useState('');
   const [isRevealing, setIsRevealing] = useState(false);
   const rouletteViewportRef = useRef<HTMLDivElement>(null);
+  const rouletteResultRef = useRef<HTMLDivElement>(null);
   const actionLock = useRef(false);
+
+  useEffect(() => {
+    if (isRevealing || rouletteStopped) {
+      rouletteResultRef.current?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'center',
+      });
+    }
+  }, [isRevealing, rouletteStopped]);
 
   async function handleOpenCase(item: InventoryItem) {
     if (actionLock.current) return;
@@ -1005,29 +1051,29 @@ export function InventoryPage() {
     setOpeningId(item.id);
     setOpenedItem(null);
     setRouletteItems([]);
+    setRouletteOffset(0);
     setRouletteStopped(false);
     setError('');
     setIsRevealing(true);
     try {
-      const reward = await openCase(item.id);
-      const reelPool = [
-        { name: 'Значок «Первая пара»', rarity: 'Обычный' as const },
-        { name: 'Аватар «Неоновый пиксель»', rarity: 'Редкий' as const },
-        { name: 'Фон профиля «Ночной город»', rarity: 'Эпический' as const },
-      ];
-      const reel = Array.from({ length: 20 }, (_, index) => {
-        const prize = reelPool[(index * 7 + 1) % reelPool.length];
-        return { ...prize, isPrize: false };
-      });
-      setRouletteItems([...reel, { name: reward.name, rarity: reward.rarity, isPrize: true }]);
-      await new Promise<void>((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve())));
-      const viewportWidth = rouletteViewportRef.current?.clientWidth ?? 540;
-      const prizeIndex = reel.length;
-      const prizeCenter = 12 + prizeIndex * 152 + 70;
+    const reward = await openCase(item.id);
+    const prizeIndex = 18 + Math.floor(Math.random() * 8);
+    const reel = Array.from({ length: prizeIndex }, () => {
+      const previewReward = chooseCampusCaseReward();
+      return { name: previewReward.name, rarity: previewReward.rarity, isPrize: false };
+    });
+    setRouletteItems([...reel, { name: 'Сюрприз', isPrize: true }]);
+    await new Promise<void>((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve())));
+    const viewportWidth = rouletteViewportRef.current?.clientWidth ?? 540;
+    const prizeCenter = 12 + prizeIndex * 152 + 70;
       setRouletteOffset(viewportWidth / 2 - prizeCenter);
       if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
         await new Promise<void>((resolve) => window.setTimeout(resolve, 5400));
       }
+      completeCaseOpening(reward);
+      setRouletteItems((current) => current.map((entry) => (
+        entry.isPrize ? { ...entry, name: reward.name, rarity: reward.rarity } : entry
+      )));
       setRouletteStopped(true);
       setOpenedItem(reward);
     } catch (openError) {
@@ -1042,23 +1088,28 @@ export function InventoryPage() {
   return (
     <Box className="campus-page">
       <PageHeader title="Инвентарь">
-        <Typography color="text.secondary">{formatNounCount(inventory.length, 'предмет', 'предмета', 'предметов')} · {walletBalance.toLocaleString('ru-RU')} жетонов</Typography>
+        <Typography color="text.secondary">{formatNounCount(inventory.filter((item) => item.kind === 'case').length, 'кейс', 'кейса', 'кейсов')} · {walletBalance.toLocaleString('ru-RU')} жетонов</Typography>
       </PageHeader>
       {error && <Alert severity="error">{error}</Alert>}
-      {openedItem && (
-        <Card className="case-result-card">
-          <Avatar className="case-result-icon"><CardGiftcardRoundedIcon /></Avatar>
-          <Box>
-            <Typography variant="overline">КЕЙС ОТКРЫТ</Typography>
-            <Typography variant="h6" fontWeight={750}>{openedItem.name}</Typography>
-            <Typography color="text.secondary">{openedItem.rarity} · Предмет уже добавлен в инвентарь</Typography>
-          </Box>
-        </Card>
-      )}
-      {isRevealing && (
-        <Box className="case-reveal" role="status" aria-live="polite">
+      {inventory.filter((item) => item.kind === 'case').length === 0 ? (
+        <SectionCard title="Пока пусто" icon={<CardGiftcardRoundedIcon />}>
+          <Typography color="text.secondary">Новых кейсов пока нет. Они появляются среди наград батл-пасса.</Typography>
+        </SectionCard>
+      ) : <Box className="inventory-grid">{inventory.filter((item) => item.kind === 'case').map((item) => (
+        <InventoryCard
+          key={item.id}
+          item={item}
+          onOpen={handleOpenCase}
+          isOpening={openingId === item.id}
+          canAfford={walletBalance >= caseOpeningPrice}
+          showRewards={selectedCaseId === item.id}
+          onToggleRewards={() => setSelectedCaseId((current) => current === item.id ? null : item.id)}
+        />
+      ))}</Box>}
+      {(isRevealing || rouletteStopped) && (
+        <Box className="case-reveal" ref={rouletteResultRef} role="status" aria-live="polite">
           <Box className="case-reveal-glow" />
-          <Typography variant="h6">Кейс открывается…</Typography>
+          <Typography variant="h6">{rouletteStopped ? 'Награда из кейса' : 'Кейс открывается…'}</Typography>
           <Box className={`case-roulette${rouletteItems.length ? ' case-roulette-ready' : ''}${rouletteStopped ? ' case-roulette-stopped' : ''}`} ref={rouletteViewportRef}>
             <Box className="case-roulette-marker" />
             <Box className="case-roulette-track" style={{ transform: `translateX(${rouletteOffset}px)` }}>
@@ -1082,13 +1133,18 @@ export function InventoryPage() {
             </Box>
           </Box>
           {!rouletteItems.length && <LinearProgress />}
+          {openedItem && (
+            <Card className="case-result-card">
+              <Avatar className="case-result-icon"><CardGiftcardRoundedIcon /></Avatar>
+              <Box>
+                <Typography variant="overline">ПРЕДМЕТ ДОБАВЛЕН В ИНВЕНТАРЬ</Typography>
+                <Typography variant="h6" fontWeight={750}>{openedItem.name}</Typography>
+                <Typography color="text.secondary">{openedItem.rarity} · {openedItem.source}</Typography>
+              </Box>
+            </Card>
+          )}
         </Box>
       )}
-      {inventory.length === 0 ? (
-        <SectionCard title="Пока пусто" icon={<CardGiftcardRoundedIcon />}>
-          <Typography color="text.secondary">Кейсы и косметические награды появятся здесь после получения уровней батл-пасса.</Typography>
-        </SectionCard>
-      ) : <Box className="inventory-grid">{inventory.map((item) => <InventoryCard key={item.id} item={item} onOpen={handleOpenCase} isOpening={openingId === item.id} canAfford={walletBalance >= caseOpeningPrice} />)}</Box>}
     </Box>
   );
 }
@@ -1106,7 +1162,7 @@ const requestStatusActions: Partial<Record<CertificateRequest['status'], Array<{
 };
 
 export function CertificateManagementPage() {
-  const { certificateRequests, updateCertificateStatus } = useCampusWorkflow();
+  const { certificateRequests, updateCertificateStatus, uploadCertificateDocument } = useCampusWorkflow();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const actionLock = useRef(false);
@@ -1128,7 +1184,46 @@ export function CertificateManagementPage() {
     }
   }
 
+  async function handleCertificateUpload(request: CertificateRequest, file: File | undefined) {
+    if (!file || actionLock.current) return;
+    if (file.type !== 'application/pdf' || !file.name.toLocaleLowerCase('ru').endsWith('.pdf')) {
+      setError('Электронную справку можно загрузить только в формате PDF.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Размер файла справки не должен превышать 10 МБ.');
+      return;
+    }
+    actionLock.current = true;
+    setBusyId(request.id);
+    setError('');
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result !== 'string') {
+            reject(new Error('Не удалось прочитать файл справки.'));
+            return;
+          }
+          resolve(reader.result);
+        };
+        reader.onerror = () => reject(new Error('Не удалось прочитать файл справки.'));
+        reader.readAsDataURL(file);
+      });
+      await uploadCertificateDocument(request.id, { fileName: file.name, dataUrl });
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : 'Не удалось загрузить электронную справку.');
+    } finally {
+      actionLock.current = false;
+      setBusyId(null);
+    }
+  }
+
   function renderRequest(request: CertificateRequest) {
+    const availableActions = (requestStatusActions[request.status] ?? []).filter((action) => (
+      !(request.deliveryMethod === 'Электронно' && request.status === 'В обработке' && action.status === 'Готова')
+    ));
+
     return (
       <Card className="office-request-card" key={request.id} variant="outlined">
         <CardContent>
@@ -1143,9 +1238,32 @@ export function CertificateManagementPage() {
           </Box>
           {request.comment && <Typography className="office-request-comment">{request.comment}</Typography>}
           <Typography variant="caption" color="text.secondary">Подана {formatDate(request.createdAt)}</Typography>
-          {(requestStatusActions[request.status] ?? []).length > 0 && (
+          {request.electronicDocument && (
+            <Button component="a" href={request.electronicDocument.dataUrl} download={request.electronicDocument.fileName} variant="outlined" size="small">
+              Скачать справку · {request.electronicDocument.fileName}
+            </Button>
+          )}
+          {request.deliveryMethod === 'Электронно' && request.status === 'В обработке' && (
+            <>
+              <Button component="label" variant="outlined" disabled={busyId !== null}>
+                {busyId === request.id ? <CircularProgress size={18} /> : 'Загрузить электронную справку (PDF)'}
+                <input
+                  hidden
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    void handleCertificateUpload(request, file);
+                  }}
+                />
+              </Button>
+              <Typography variant="caption" color="text.secondary">PDF-файл, не более 10 МБ</Typography>
+            </>
+          )}
+          {availableActions.length > 0 && (
             <Stack direction={{ xs: 'column', sm: 'row' }} gap={1} className="office-request-actions">
-              {(requestStatusActions[request.status] ?? []).map((action) => (
+              {availableActions.map((action) => (
                 <Button
                   key={action.status}
                   variant={action.color === 'error' ? 'outlined' : 'contained'}
@@ -1328,7 +1446,12 @@ export function CertificateRequestPage() {
         <Stack divider={<Divider flexItem />} spacing={1.5}>
           {certificateRequests.map((request) => (
             <Stack key={request.id} direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" gap={1}>
-              <Box><Typography fontWeight={650}>{request.type}</Typography><Typography variant="caption" color="text.secondary">{request.comment ? `${request.comment} · ` : ''}{request.deliveryMethod} · {formatDate(request.createdAt, false)}</Typography></Box>
+              <Box sx={{ minWidth: 0 }}><Typography fontWeight={650} sx={{ overflowWrap: 'anywhere' }}>{request.type}</Typography><Typography variant="caption" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>{request.comment ? `${request.comment} · ` : ''}{request.deliveryMethod} · {formatDate(request.createdAt, false)}</Typography></Box>
+              {request.electronicDocument && (
+                <Button component="a" href={request.electronicDocument.dataUrl} download={request.electronicDocument.fileName} size="small">
+                  Скачать PDF
+                </Button>
+              )}
               <Chip size="small" label={request.status} className={`certificate-status certificate-status-${request.status}`} />
             </Stack>
           ))}

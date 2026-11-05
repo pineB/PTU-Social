@@ -7,11 +7,11 @@ export const theme = createTheme({
   colorSchemes: {
     light: {
       palette: {
-        primary: { main: '#315d46', dark: '#244734', light: '#e7efdf' },
+        primary: { main: '#3569b8', dark: '#27518f', light: '#e7f0fc' },
         secondary: { main: '#b27b32' },
-        background: { default: '#f3f2ec', paper: '#fffefa' },
-        text: { primary: '#1c2b23', secondary: '#66746b' },
-        divider: '#e1e4d9',
+        background: { default: '#f5f8fc', paper: '#ffffff' },
+        text: { primary: '#1c2b3d', secondary: '#627186' },
+        divider: '#dfe7f1',
         success: { main: '#47784e' },
         warning: { main: '#aa7623' },
         error: { main: '#bf5545' },
@@ -19,11 +19,11 @@ export const theme = createTheme({
     },
     dark: {
       palette: {
-        primary: { main: '#b7d77d', dark: '#c9e694', light: '#2b3b2b' },
+        primary: { main: '#8ab4f8', dark: '#a8c7fa', light: '#24354b' },
         secondary: { main: '#edc677' },
-        background: { default: '#121a16', paper: '#1b2620' },
-        text: { primary: '#eff1e7', secondary: '#a9b5a8' },
-        divider: '#34443a',
+        background: { default: '#101722', paper: '#182331' },
+        text: { primary: '#edf2fa', secondary: '#aab8ca' },
+        divider: '#334256',
         success: { main: '#8ebc7e' },
         warning: { main: '#e2bd6d' },
         error: { main: '#e38470' },
