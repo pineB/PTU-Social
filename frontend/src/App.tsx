@@ -29,6 +29,7 @@ import {
   GroupConfirmationPage,
   InventoryPage,
   ScheduleManagementPage,
+  StudentSchedulePage,
   TeacherStudentsPage,
   WalletPage,
 } from './pages/CampusPages';
@@ -97,6 +98,7 @@ export default function App() {
                 <Route path="student/battle-pass" element={<BattlePassPage />} />
                 <Route path="student/inventory" element={<InventoryPage />} />
                 <Route path="student/certificates" element={<CertificateRequestPage />} />
+                <Route path="student/schedule" element={<StudentSchedulePage />} />
               </Route>
               <Route element={<RequireRole role="TEACHER" />}>
                 <Route path="teacher" element={<TeacherDashboard />} />

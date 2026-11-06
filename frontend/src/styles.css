@@ -109,9 +109,11 @@ button, input { font: inherit; }
 .topbar-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 4px; }
 .topbar-page-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topbar-avatar { width: 36px !important; height: 36px !important; flex: 0 0 36px; }
-.topbar-user.MuiButton-root { display: flex; min-width: 0; max-width: 220px; flex: 0 1 auto; gap: 9px; padding: 5px 9px; border: 1px solid transparent; border-radius: 12px; color: var(--text-primary); text-align: left; text-transform: none; }
+.topbar-user { display: flex; min-width: 0; max-width: 260px; flex: 0 1 auto; align-items: center; gap: 9px; }
+.topbar-user.MuiButton-root { padding: 5px 9px; border: 1px solid transparent; border-radius: 12px; color: var(--text-primary); text-align: left; text-transform: none; }
 .topbar-user.MuiButton-root:hover { border-color: var(--border); background: var(--surface-muted); }
-.topbar-user-copy { display: grid; min-width: 0; max-width: min(220px, 25vw); gap: 1px; }
+.topbar-user-static { padding: 5px 9px; }
+.topbar-user-copy { display: grid; min-width: 0; max-width: min(240px, 25vw); gap: 1px; }
 .topbar-user-copy .MuiTypography-root { overflow: hidden; text-overflow: ellipsis; }
 .topbar-balance.MuiButton-root, .topbar-balance.MuiButton-root:hover { min-height: 40px; padding: 0 13px; border: 1px solid color-mix(in srgb, var(--brand) 20%, var(--border)); border-radius: 12px; color: var(--brand-strong) !important; background: var(--brand-soft) !important; font-size: 13px; font-weight: 800; text-transform: none; }
 .topbar-balance.MuiButton-root:hover { border-color: color-mix(in srgb, var(--brand) 46%, var(--border)); background: color-mix(in srgb, var(--brand) 14%, var(--surface)) !important; }
@@ -783,6 +785,16 @@ body { background: var(--app-bg); color: var(--text-primary); }
 .role-link-active::before { top: 10px; bottom: 10px; background: var(--brand); }
 .role-icon, .role-link-active .role-icon { color: var(--brand); }
 .role-link .MuiListItemText-primary { font-size: 13px; font-weight: 600; line-height: 1.35; }
+.logout-button.MuiIconButton-root { color: var(--text-secondary) !important; }
+.logout-button.MuiIconButton-root:hover { color: var(--text-primary) !important; background: var(--surface-muted) !important; }
+.schedule-week-table { width: 100%; min-width: 1120px; border-collapse: separate; border-spacing: 0; }
+.schedule-week-table th, .schedule-week-table td { min-width: 150px; padding: 10px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.schedule-week-table thead th { position: sticky; top: 0; z-index: 1; background: var(--surface-muted); color: var(--text-primary); font-size: 13px; }
+.schedule-week-table tr:last-child > * { border-bottom: 0; }
+.schedule-week-table tr > *:last-child { border-right: 0; }
+.schedule-week-table .schedule-week-time { position: sticky; left: 0; z-index: 1; min-width: 132px; background: var(--surface-raised); }
+.schedule-week-table thead .schedule-week-time { z-index: 2; background: var(--surface-muted); }
+.schedule-week-lesson { border-radius: 10px !important; background: var(--surface-raised) !important; }
 .MuiDrawer-paper { border-color: var(--border) !important; background: var(--surface) !important; }
 .main-column { background: var(--app-bg); }
 .topbar { background: color-mix(in srgb, var(--surface) 92%, transparent) !important; border-color: var(--border); backdrop-filter: blur(20px); }
@@ -986,12 +998,11 @@ body { background: var(--app-bg); color: var(--text-primary); }
   .theme-toggle { flex: 0 0 40px; padding: 8px !important; }
   .notification-button.MuiIconButton-root { min-width: 48px; padding: 8px 6px !important; }
   .theme-toggle { margin: 0 !important; }
-  .topbar-user-static { min-width: 0; max-width: min(116px, 30vw); flex: 0 1 auto; padding: 0 2px !important; }
-  .topbar-user-static .topbar-avatar { display: none; }
-  .topbar-user-static .topbar-user-copy { display: grid; min-width: 0; max-width: min(116px, 30vw); gap: 0; }
-  .topbar-user-static .topbar-user-copy .MuiTypography-root { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .topbar-user-static { min-width: 0; max-width: min(132px, 34vw); flex: 0 1 auto; padding: 0 2px !important; }
+  .topbar-user-copy { display: grid !important; min-width: 0; max-width: min(132px, 34vw); gap: 0; }
+  .topbar-user-copy .MuiTypography-root { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   .topbar-user-static .topbar-user-copy .MuiTypography-caption { display: none; }
-  .topbar-user.MuiButton-root { max-width: 40px; flex: 0 0 40px; }
+  .topbar-user.MuiButton-root { max-width: min(132px, 34vw); flex: 0 1 auto; }
   .welcome-row { min-height: 0; align-items: stretch; gap: 15px; padding: 21px 19px; border-radius: 20px; }
   .welcome-copy, .welcome-row > .MuiStack-root { max-width: 100%; width: 100%; }
   .welcome-row > .MuiStack-root { align-items: stretch; flex-direction: column; }

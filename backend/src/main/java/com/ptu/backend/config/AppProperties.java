@@ -43,7 +43,7 @@ public record AppProperties(
 	public record AdminBootstrap(String email, String password, String fullName) {
 	}
 
-	public record Seed(String officeEmail, String officePassword) {
+	public record Seed(String officeEmail, String officePassword, String adminEmail, String adminPassword) {
 	}
 
 	public record RateLimit(boolean enabled, Limit login, Limit authenticated, Limit anonymous) {

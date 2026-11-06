@@ -283,6 +283,7 @@ public class CampusService {
                     from study_groups g left join student_profiles lead
                         on lead.group_id = g.id and lead.is_group_leader = true order by g.name
                     """, groupMapper());
+            case ADMIN -> throw ApiException.forbidden("Нет прав на просмотр кампусных групп");
         };
         return groups.stream().map(g -> new GroupView(g.id.toString(), g.name, g.size,
                 g.leaderId == null ? null : g.leaderId.toString())).toList();
@@ -435,8 +436,10 @@ public class CampusService {
     @Transactional(readOnly = true)
     public List<ScheduleView> schedule(UserPrincipal principal) {
         return jdbc.query("""
-                select s.id, s.weekday, s.start_time, s.end_time, g.name, s.subject, s.teacher, s.room
+                select s.id, s.weekday, s.start_time, s.end_time, s.group_id, g.name, s.subject,
+                    s.teacher_id, coalesce(u.full_name, s.teacher) teacher_name, s.room
                 from campus_schedule_entries s join study_groups g on g.id = s.group_id
+                left join users u on u.id = s.teacher_id
                 where s.group_id in (
                     select sp.group_id from student_profiles sp where sp.user_id = ?
                     union
@@ -450,24 +453,129 @@ public class CampusService {
                 """, scheduleMapper(), principal.id(), principal.id(), principal.role().name());
     }
 
+    @Transactional(readOnly = true)
+    public List<ScheduleChangeView> scheduleChanges(UserPrincipal principal) {
+        requireRole(principal, Role.STUDENT);
+        return jdbc.query("""
+                select c.id, c.change_type, c.message, g.name, c.created_at
+                from campus_schedule_changes c
+                join study_groups g on g.id = c.group_id
+                join student_profiles sp on sp.group_id = c.group_id
+                where sp.user_id = ?
+                order by c.created_at desc, c.id desc
+                limit 50
+                """, (rs, row) -> new ScheduleChangeView(
+                rs.getObject("id", UUID.class).toString(), rs.getString("change_type"),
+                rs.getString("message"), rs.getString("name"),
+                rs.getTimestamp("created_at").toInstant().toString()), principal.id());
+    }
+
     @Transactional
     public ScheduleView createSchedule(UserPrincipal principal, ScheduleRequest request) {
         requireRole(principal, Role.ACADEMIC_OFFICE);
         validateSchedule(request);
-        UUID groupId = jdbc.query("""
-                select id from study_groups where lower(name) = lower(?)
-                """, (rs, row) -> rs.getObject(1, UUID.class), request.group().trim()).stream().findFirst()
-                .orElseThrow(() -> ApiException.badRequest("Учебная группа не найдена"));
+        UUID groupId = parseUuid(request.groupId(), "groupId");
+        String teacherName = activeTeacherName(request.teacherId());
+        ensureTeacherHasNoScheduleOverlap(null, request, parseUuid(request.teacherId(), "teacherId"));
         UUID id = jdbc.queryForObject("""
-                insert into campus_schedule_entries(group_id, weekday, start_time, end_time, subject, teacher, room, created_by)
-                values (?, ?, ?, ?, ?, ?, ?, ?) returning id
+                insert into campus_schedule_entries(group_id, weekday, start_time, end_time, subject, teacher,
+                    teacher_id, room, created_by)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?) returning id
                 """, UUID.class, groupId, request.weekday().trim(), request.startTime().trim(),
-                request.endTime().trim(), request.subject().trim(), request.teacher().trim(),
+                request.endTime().trim(), request.subject().trim(), teacherName, parseUuid(request.teacherId(), "teacherId"),
                 request.room().trim(), principal.id());
-        return jdbc.query("""
-                select s.id, s.weekday, s.start_time, s.end_time, g.name, s.subject, s.teacher, s.room
-                from campus_schedule_entries s join study_groups g on g.id = s.group_id where s.id = ?
-                """, scheduleMapper(), id).getFirst();
+        ScheduleView created = scheduleEntry(id, false);
+        recordScheduleChange(groupId, id, "ADDED", "Добавлено занятие: " + describeSchedule(created));
+        return created;
+    }
+
+    @Transactional
+    public ScheduleView updateSchedule(UserPrincipal principal, UUID scheduleId, ScheduleRequest request) {
+        requireRole(principal, Role.ACADEMIC_OFFICE);
+        validateSchedule(request);
+        ScheduleView previous = scheduleEntry(scheduleId, true);
+        UUID groupId = parseUuid(request.groupId(), "groupId");
+        UUID teacherId = parseUuid(request.teacherId(), "teacherId");
+        String teacherName = activeTeacherName(request.teacherId());
+        ensureTeacherHasNoScheduleOverlap(scheduleId, request, teacherId);
+        jdbc.update("""
+                update campus_schedule_entries
+                set group_id = ?, weekday = ?, start_time = ?, end_time = ?, subject = ?, teacher = ?,
+                    teacher_id = ?, room = ?
+                where id = ?
+                """, groupId, request.weekday().trim(), request.startTime().trim(), request.endTime().trim(),
+                request.subject().trim(), teacherName, teacherId, request.room().trim(), scheduleId);
+        ScheduleView updated = scheduleEntry(scheduleId, false);
+        String message = "Изменение расписания. Было: " + describeSchedule(previous)
+                + ". Стало: " + describeSchedule(updated);
+        recordScheduleChange(UUID.fromString(previous.groupId()), scheduleId, "CHANGED", message);
+        if (!previous.groupId().equals(groupId)) {
+            recordScheduleChange(groupId, scheduleId, "CHANGED", message);
+        }
+        return updated;
+    }
+
+    @Transactional
+    public void deleteSchedule(UserPrincipal principal, UUID scheduleId) {
+        requireRole(principal, Role.ACADEMIC_OFFICE);
+        ScheduleView previous = scheduleEntry(scheduleId, true);
+        jdbc.update("delete from campus_schedule_entries where id = ?", scheduleId);
+        recordScheduleChange(UUID.fromString(previous.groupId()), scheduleId, "CANCELLED",
+                "Занятие отменено: " + describeSchedule(previous));
+    }
+
+    @Transactional
+    public void updateScheduleTimeSlot(UserPrincipal principal, ScheduleTimeChangeRequest request) {
+        requireRole(principal, Role.ACADEMIC_OFFICE);
+        if (request == null || !validTimeRange(request.previousStartTime(), request.previousEndTime())
+                || !validTimeRange(request.startTime(), request.endTime())) {
+            throw ApiException.badRequest("Укажите корректные интервалы времени");
+        }
+        List<ScheduleView> entries = jdbc.query("""
+                select s.id, s.weekday, s.start_time, s.end_time, s.group_id, g.name, s.subject,
+                    s.teacher_id, coalesce(u.full_name, s.teacher) teacher_name, s.room
+                from campus_schedule_entries s
+                join study_groups g on g.id = s.group_id
+                left join users u on u.id = s.teacher_id
+                where s.start_time = ? and s.end_time = ?
+                order by s.teacher_id, s.weekday, s.id
+                for update of s
+                """, scheduleMapper(), request.previousStartTime(), request.previousEndTime());
+        if (entries.isEmpty()) {
+            throw ApiException.notFound("В это время нет пар для изменения");
+        }
+        List<UUID> entryIds = entries.stream().map(entry -> UUID.fromString(entry.id())).toList();
+        for (UUID teacherId : entries.stream().map(ScheduleView::teacherId).filter(id -> id != null)
+                .distinct().sorted().map(UUID::fromString).toList()) {
+            jdbc.query("select id from users where id = ? for update",
+                    (rs, row) -> rs.getObject(1, UUID.class), teacherId);
+        }
+        String excludedIds = String.join(",", java.util.Collections.nCopies(entryIds.size(), "?"));
+        for (ScheduleView entry : entries) {
+            if (entry.teacherId() == null) {
+                throw ApiException.conflict("Сначала назначьте преподавателя каждой паре в этом временном слоте");
+            }
+            List<Object> parameters = new java.util.ArrayList<>(List.of(UUID.fromString(entry.teacherId()),
+                    entry.weekday(), request.endTime(), request.startTime()));
+            parameters.addAll(entryIds);
+            Integer conflicts = jdbc.queryForObject("""
+                    select count(*) from campus_schedule_entries
+                    where teacher_id = ? and weekday = ? and start_time < ? and end_time > ?
+                        and id not in (
+                    """ + excludedIds + ")", Integer.class, parameters.toArray());
+            if (conflicts != null && conflicts > 0) {
+                throw ApiException.conflict("У преподавателя уже есть занятие в выбранном времени");
+            }
+        }
+        for (ScheduleView entry : entries) {
+            UUID id = UUID.fromString(entry.id());
+            jdbc.update("update campus_schedule_entries set start_time = ?, end_time = ? where id = ?",
+                    request.startTime(), request.endTime(), id);
+            ScheduleView updated = scheduleEntry(id, false);
+            recordScheduleChange(UUID.fromString(entry.groupId()), id, "CHANGED",
+                    "Изменено время пары. Было: " + describeSchedule(entry)
+                            + ". Стало: " + describeSchedule(updated));
+        }
     }
 
     @Transactional
@@ -839,12 +947,13 @@ public class CampusService {
 
     private void validateSchedule(ScheduleRequest request) {
         if (request == null || blank(request.weekday()) || blank(request.startTime()) || blank(request.endTime())
-                || blank(request.group()) || blank(request.subject()) || blank(request.teacher()) || blank(request.room())) {
+                || blank(request.groupId()) || blank(request.subject()) || blank(request.teacherId())
+                || blank(request.room())) {
             throw ApiException.badRequest("Заполните все поля расписания");
         }
         if (request.weekday().length() > 24 || request.startTime().length() != 5
                 || request.endTime().length() != 5 || request.subject().length() > 160
-                || request.teacher().length() > 160 || request.room().length() > 80) {
+                || request.room().length() > 80) {
             throw ApiException.badRequest("Превышена допустимая длина поля расписания");
         }
         if (!request.startTime().matches("\\d{2}:\\d{2}") || !request.endTime().matches("\\d{2}:\\d{2}")) {
@@ -864,6 +973,65 @@ public class CampusService {
                 .contains(request.weekday())) {
             throw ApiException.badRequest("Некорректный день недели");
         }
+    }
+
+    private boolean validTimeRange(String startValue, String endValue) {
+        if (blank(startValue) || blank(endValue) || !startValue.matches("\\d{2}:\\d{2}")
+                || !endValue.matches("\\d{2}:\\d{2}")) {
+            return false;
+        }
+        try {
+            return LocalTime.parse(endValue).isAfter(LocalTime.parse(startValue));
+        } catch (DateTimeParseException exception) {
+            return false;
+        }
+    }
+
+    private ScheduleView scheduleEntry(UUID id, boolean forUpdate) {
+        return jdbc.query("""
+                select s.id, s.weekday, s.start_time, s.end_time, s.group_id, g.name, s.subject,
+                    s.teacher_id, coalesce(u.full_name, s.teacher) teacher_name, s.room
+                from campus_schedule_entries s
+                join study_groups g on g.id = s.group_id
+                left join users u on u.id = s.teacher_id
+                where s.id = ?
+                """ + (forUpdate ? " for update of s" : ""), scheduleMapper(), id).stream().findFirst()
+                .orElseThrow(() -> ApiException.notFound("Занятие расписания не найдено"));
+    }
+
+    private String activeTeacherName(String teacherIdValue) {
+        UUID teacherId = parseUuid(teacherIdValue, "teacherId");
+        return jdbc.query("""
+                select full_name from users where id = ? and role = 'TEACHER' and is_active = true
+                """, (rs, row) -> rs.getString(1), teacherId).stream().findFirst()
+                .orElseThrow(() -> ApiException.badRequest("Выберите действующего преподавателя из списка"));
+    }
+
+    private void ensureTeacherHasNoScheduleOverlap(UUID excludedEntryId, ScheduleRequest request, UUID teacherId) {
+        jdbc.query("select id from users where id = ? for update", (rs, row) -> rs.getObject(1, UUID.class), teacherId);
+        String sql = """
+                select count(*) from campus_schedule_entries
+                where teacher_id = ? and weekday = ? and start_time < ? and end_time > ?
+                """ + (excludedEntryId == null ? "" : " and id <> ?");
+        Integer conflicts = excludedEntryId == null
+                ? jdbc.queryForObject(sql, Integer.class, teacherId, request.weekday(), request.endTime(), request.startTime())
+                : jdbc.queryForObject(sql, Integer.class, teacherId, request.weekday(), request.endTime(),
+                        request.startTime(), excludedEntryId);
+        if (conflicts != null && conflicts > 0) {
+            throw ApiException.conflict("У преподавателя уже есть занятие в это время");
+        }
+    }
+
+    private void recordScheduleChange(UUID groupId, UUID scheduleId, String type, String message) {
+        jdbc.update("""
+                insert into campus_schedule_changes(group_id, schedule_entry_id, change_type, message)
+                values (?, ?, ?, ?)
+                """, groupId, scheduleId, type, message);
+    }
+
+    private String describeSchedule(ScheduleView entry) {
+        return "%s, %s %s–%s, %s, %s, ауд. %s".formatted(entry.group(), entry.weekday(),
+                entry.startTime(), entry.endTime(), entry.subject(), entry.teacher(), entry.room());
     }
 
     private void requireRole(UserPrincipal principal, Role... allowed) {
@@ -942,7 +1110,9 @@ public class CampusService {
     private RowMapper<ScheduleView> scheduleMapper() {
         return (rs, row) -> new ScheduleView(rs.getObject("id", UUID.class).toString(),
                 rs.getString("weekday"), rs.getString("start_time"), rs.getString("end_time"),
-                rs.getString("name"), rs.getString("subject"), rs.getString("teacher"), rs.getString("room"));
+                rs.getObject("group_id", UUID.class).toString(), rs.getString("name"), rs.getString("subject"),
+                rs.getObject("teacher_id", UUID.class) == null ? null : rs.getObject("teacher_id", UUID.class).toString(),
+                rs.getString("teacher_name"), rs.getString("room"));
     }
 
     private RowMapper<InventoryItemView> inventoryMapper() {

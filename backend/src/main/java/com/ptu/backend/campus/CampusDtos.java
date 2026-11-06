@@ -118,11 +118,19 @@ public final class CampusDtos {
     }
 
     public record ScheduleRequest(
-            String weekday, String startTime, String endTime, String group, String subject, String teacher, String room) {
+            String weekday, String startTime, String endTime, String groupId, String subject, String teacherId, String room) {
     }
 
     public record ScheduleView(
-            String id, String weekday, String startTime, String endTime, String group, String subject, String teacher,
-            String room) {
+            String id, String weekday, String startTime, String endTime, String groupId, String group, String subject,
+            String teacherId, String teacher, String room) {
+    }
+
+    public record ScheduleChangeView(
+            String id, String type, String message, String groupName, String createdAt) {
+    }
+
+    public record ScheduleTimeChangeRequest(String previousStartTime, String previousEndTime,
+                                            String startTime, String endTime) {
     }
 }

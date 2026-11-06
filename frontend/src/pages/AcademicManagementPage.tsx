@@ -24,7 +24,8 @@ import ArchiveRoundedIcon from '@mui/icons-material/ArchiveRounded';
 import GroupAddRoundedIcon from '@mui/icons-material/GroupAddRounded';
 import PersonAddAltRoundedIcon from '@mui/icons-material/PersonAddAltRounded';
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
-import { createManagedGroup, createTeacherAssignment, createTeacherInvite, getAcademicDepartments, getAcademicDisciplines, getAcademicFaculties, listManagedGroups, listManagedTeachers, renameManagedGroup, setManagedTeacherActive, archiveTeacherAssignment, type CatalogItem, type ManagedGroup, type ManagedTeacher } from '../api/administration';
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
+import { archiveTeacherAssignment, createAcademicFaculty, createManagedGroup, createTeacherAssignment, createTeacherInvite, deleteAcademicFaculty, deleteManagedGroup, getAcademicDepartments, getAcademicDisciplines, getAcademicFaculties, listManagedGroups, listManagedTeachers, renameAcademicDepartment, renameManagedGroup, setManagedTeacherActive, type CatalogItem, type ManagedGroup, type ManagedTeacher } from '../api/administration';
 
 interface ApiErrorResponse {
   message?: string;
@@ -51,7 +52,9 @@ export default function AcademicManagementPage() {
 
   const [groupName, setGroupName] = useState('');
   const [facultyId, setFacultyId] = useState('');
+  const [newFacultyName, setNewFacultyName] = useState('');
   const [renamedGroups, setRenamedGroups] = useState<Record<string, string>>({});
+  const [renamedDepartments, setRenamedDepartments] = useState<Record<string, string>>({});
 
   const [teacherName, setTeacherName] = useState('');
   const [teacherEmail, setTeacherEmail] = useState('');
@@ -75,6 +78,7 @@ export default function AcademicManagementPage() {
       ]);
       setFaculties(facultyItems);
       setDepartments(departmentItems);
+      setRenamedDepartments(Object.fromEntries(departmentItems.map((department) => [department.id, department.name])));
       setGroups(groupItems);
       setTeachers(teacherItems);
       setRenamedGroups(Object.fromEntries(groupItems.map((group) => [group.id, group.name])));
@@ -144,6 +148,38 @@ export default function AcademicManagementPage() {
     }, 'Учебная группа создана.');
   }
 
+  async function handleCreateFaculty(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await runAction(async () => {
+      const created = await createAcademicFaculty(newFacultyName.trim());
+      setFaculties((current) => [...current, created].sort((a, b) => a.name.localeCompare(b.name, 'ru')));
+      setFacultyId(created.id);
+      setNewFacultyName('');
+    }, 'Факультет создан.');
+  }
+
+  async function handleDeleteFaculty(faculty: CatalogItem) {
+    await runAction(async () => {
+      await deleteAcademicFaculty(faculty.id);
+      setFaculties((current) => current.filter((item) => item.id !== faculty.id));
+      setFacultyId((current) => current === faculty.id ? '' : current);
+    }, 'Факультет удалён.');
+  }
+
+  async function handleDeleteGroup(group: ManagedGroup) {
+    await runAction(async () => {
+      await deleteManagedGroup(group.id);
+      setGroups((current) => current.filter((item) => item.id !== group.id));
+      setRenamedGroups((current) => {
+        const next = { ...current };
+        delete next[group.id];
+        return next;
+      });
+      setInviteGroupIds((current) => current.filter((id) => id !== group.id));
+      setAssignmentGroupId((current) => current === group.id ? '' : current);
+    }, `Группа ${group.name} удалена.`);
+  }
+
   async function handleRenameGroup(groupId: string) {
     const name = renamedGroups[groupId]?.trim();
     if (!name) {
@@ -155,6 +191,20 @@ export default function AcademicManagementPage() {
       setGroups((current) => current.map((group) => group.id === updated.id ? updated : group));
       setRenamedGroups((current) => ({ ...current, [updated.id]: updated.name }));
     }, 'Название группы сохранено.');
+  }
+
+  async function handleRenameDepartment(departmentId: string) {
+    const name = renamedDepartments[departmentId]?.trim();
+    if (!name) {
+      setError('Укажите название кафедры.');
+      return;
+    }
+    await runAction(async () => {
+      const updated = await renameAcademicDepartment(departmentId, name);
+      setDepartments((current) => current.map((department) => department.id === updated.id ? updated : department)
+        .sort((a, b) => a.name.localeCompare(b.name, 'ru')));
+      setRenamedDepartments((current) => ({ ...current, [updated.id]: updated.name }));
+    }, 'Название кафедры сохранено.');
   }
 
   async function handleInviteTeacher(event: FormEvent<HTMLFormElement>) {
@@ -241,17 +291,59 @@ export default function AcademicManagementPage() {
             </Box>
 
             <Divider sx={{ my: 2.5 }} />
+            <Typography variant="subtitle1" fontWeight={750} mb={1}>Факультеты</Typography>
+            <Box component="form" onSubmit={(event) => void handleCreateFaculty(event)} display="grid" gridTemplateColumns={{ xs: '1fr', sm: 'minmax(0, 1fr) auto' }} gap={1} mb={2}>
+              <TextField label="Название факультета" value={newFacultyName} onChange={(event) => setNewFacultyName(event.target.value)} required fullWidth />
+              <Button type="submit" variant="outlined" disabled={busy} startIcon={busy ? <CircularProgress size={18} /> : <AddRoundedIcon />}>Добавить</Button>
+            </Box>
+            {faculties.map((faculty) => (
+              <Stack key={faculty.id} direction="row" spacing={1} alignItems="center" justifyContent="space-between" py={0.5}>
+                <Typography variant="body2">{faculty.name}</Typography>
+                <Button aria-label={`Удалить факультет ${faculty.name}`} color="error" size="small" disabled={busy} onClick={() => void handleDeleteFaculty(faculty)} startIcon={<DeleteOutlineRoundedIcon />}>Удалить</Button>
+              </Stack>
+            ))}
+
+            <Divider sx={{ my: 2.5 }} />
+            <Typography variant="subtitle1" fontWeight={750} mb={1}>Кафедры</Typography>
+            {departments.length ? (
+              <Stack spacing={1.25}>
+                {departments.map((department) => (
+                  <Box key={department.id} display="grid" gridTemplateColumns={{ xs: '1fr', sm: 'minmax(0, 1fr) auto' }} gap={1} alignItems="center">
+                    <TextField
+                      size="small"
+                      label="Название кафедры"
+                      value={renamedDepartments[department.id] ?? department.name}
+                      onChange={(event) => setRenamedDepartments((current) => ({ ...current, [department.id]: event.target.value }))}
+                      fullWidth
+                    />
+                    <Button
+                      disabled={busy || !renamedDepartments[department.id]?.trim() || renamedDepartments[department.id] === department.name}
+                      onClick={() => void handleRenameDepartment(department.id)}
+                      startIcon={<SaveRoundedIcon />}
+                    >
+                      Сохранить
+                    </Button>
+                  </Box>
+                ))}
+              </Stack>
+            ) : <Typography color="text.secondary">Кафедры не найдены.</Typography>}
+
+            <Divider sx={{ my: 2.5 }} />
+            <Typography variant="subtitle1" fontWeight={750} mb={1}>Группы</Typography>
             {groups.length ? (
               <Stack spacing={1.5}>
                 {groups.map((group) => (
                   <Box key={group.id} display="grid" gridTemplateColumns={{ xs: '1fr', sm: 'minmax(0, 1fr) auto' }} gap={1} alignItems="center">
-                    <TextField
-                      size="small"
-                      label={`${group.facultyName} · ${group.name}`}
-                      value={renamedGroups[group.id] ?? group.name}
-                      onChange={(event) => setRenamedGroups((current) => ({ ...current, [group.id]: event.target.value }))}
-                      fullWidth
-                    />
+                    <Stack direction="row" spacing={1} alignItems="center" minWidth={0}>
+                      <TextField
+                        size="small"
+                        label={`${group.facultyName} · ${group.name}`}
+                        value={renamedGroups[group.id] ?? group.name}
+                        onChange={(event) => setRenamedGroups((current) => ({ ...current, [group.id]: event.target.value }))}
+                        fullWidth
+                      />
+                      <Button aria-label={`Удалить группу ${group.name}`} color="error" disabled={busy} onClick={() => void handleDeleteGroup(group)}><DeleteOutlineRoundedIcon /></Button>
+                    </Stack>
                     <Button disabled={busy || !renamedGroups[group.id]?.trim() || renamedGroups[group.id] === group.name} onClick={() => void handleRenameGroup(group.id)} startIcon={<SaveRoundedIcon />}>Сохранить</Button>
                   </Box>
                 ))}

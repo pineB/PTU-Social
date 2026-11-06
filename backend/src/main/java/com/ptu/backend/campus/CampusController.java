@@ -126,6 +126,28 @@ public class CampusController {
         return campus.createSchedule(principal, request);
     }
 
+    @PutMapping("/campus/schedule/{scheduleId}")
+    public ScheduleView updateSchedule(@AuthenticationPrincipal UserPrincipal principal,
+                                       @PathVariable UUID scheduleId, @RequestBody ScheduleRequest request) {
+        return campus.updateSchedule(principal, scheduleId, request);
+    }
+
+    @DeleteMapping("/campus/schedule/{scheduleId}")
+    public void deleteSchedule(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID scheduleId) {
+        campus.deleteSchedule(principal, scheduleId);
+    }
+
+    @PatchMapping("/campus/schedule/time-slot")
+    public void updateScheduleTimeSlot(@AuthenticationPrincipal UserPrincipal principal,
+                                       @RequestBody ScheduleTimeChangeRequest request) {
+        campus.updateScheduleTimeSlot(principal, request);
+    }
+
+    @GetMapping("/campus/schedule/changes")
+    public List<ScheduleChangeView> scheduleChanges(@AuthenticationPrincipal UserPrincipal principal) {
+        return campus.scheduleChanges(principal);
+    }
+
     @GetMapping("/campus/pass")
     public PassView pass(@AuthenticationPrincipal UserPrincipal principal) {
         return campus.pass(principal);

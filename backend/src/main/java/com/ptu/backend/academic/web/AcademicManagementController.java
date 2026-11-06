@@ -38,6 +38,29 @@ public class AcademicManagementController {
 		return service.departments();
 	}
 
+	@PatchMapping("/departments/{departmentId}")
+	public CatalogItem renameDepartment(@PathVariable UUID departmentId,
+			@Valid @RequestBody RenameDepartmentRequest request) {
+		return service.renameDepartment(departmentId, request);
+	}
+
+	@GetMapping("/faculties")
+	public List<CatalogItem> faculties() {
+		return service.faculties();
+	}
+
+	@PostMapping("/faculties")
+	@ResponseStatus(HttpStatus.CREATED)
+	public CatalogItem createFaculty(@Valid @RequestBody CreateFacultyRequest request) {
+		return service.createFaculty(request);
+	}
+
+	@DeleteMapping("/faculties/{facultyId}")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void deleteFaculty(@PathVariable UUID facultyId) {
+		service.deleteFaculty(facultyId);
+	}
+
 	@GetMapping("/departments/{departmentId}/disciplines")
 	public List<CatalogItem> disciplines(@PathVariable UUID departmentId) {
 		return service.disciplines(departmentId);
@@ -57,6 +80,12 @@ public class AcademicManagementController {
 	@PatchMapping("/groups/{groupId}")
 	public ManagedGroup renameGroup(@PathVariable UUID groupId, @Valid @RequestBody RenameGroupRequest request) {
 		return service.renameGroup(groupId, request);
+	}
+
+	@DeleteMapping("/groups/{groupId}")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void deleteGroup(@PathVariable UUID groupId) {
+		service.deleteGroup(groupId);
 	}
 
 	@GetMapping("/teachers")
@@ -98,6 +127,12 @@ public class AcademicManagementController {
 	}
 
 	public record CreateGroupRequest(@NotBlank @Size(max = 255) String name, @NotNull UUID facultyId) {
+	}
+
+	public record CreateFacultyRequest(@NotBlank @Size(max = 255) String name) {
+	}
+
+	public record RenameDepartmentRequest(@NotBlank @Size(max = 255) String name) {
 	}
 
 	public record RenameGroupRequest(@NotBlank @Size(max = 255) String name) {

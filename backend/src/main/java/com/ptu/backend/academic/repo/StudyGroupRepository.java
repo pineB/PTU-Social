@@ -14,4 +14,6 @@ public interface StudyGroupRepository extends JpaRepository<StudyGroup, UUID> {
 	Optional<StudyGroup> findByNameIgnoreCase(String name);
 
 	List<StudyGroup> findAllByFacultyId(UUID facultyId, Sort sort);
+
+	boolean existsByFacultyId(UUID facultyId);
 }

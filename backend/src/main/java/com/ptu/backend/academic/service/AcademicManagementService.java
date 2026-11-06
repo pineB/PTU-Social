@@ -7,7 +7,9 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import com.ptu.backend.academic.domain.AssignmentStatus;
+import com.ptu.backend.academic.domain.Department;
 import com.ptu.backend.academic.domain.Discipline;
+import com.ptu.backend.academic.domain.Faculty;
 import com.ptu.backend.academic.domain.Semester;
 import com.ptu.backend.academic.domain.StudyGroup;
 import com.ptu.backend.academic.domain.TeacherAssignment;
@@ -20,10 +22,12 @@ import com.ptu.backend.academic.repo.TeacherAssignmentRepository;
 import com.ptu.backend.academic.web.AcademicManagementController.CatalogItem;
 import com.ptu.backend.academic.web.AcademicManagementController.CreateAssignmentRequest;
 import com.ptu.backend.academic.web.AcademicManagementController.CreateGroupRequest;
+import com.ptu.backend.academic.web.AcademicManagementController.CreateFacultyRequest;
 import com.ptu.backend.academic.web.AcademicManagementController.ManagedAssignment;
 import com.ptu.backend.academic.web.AcademicManagementController.ManagedGroup;
 import com.ptu.backend.academic.web.AcademicManagementController.ManagedTeacher;
 import com.ptu.backend.academic.web.AcademicManagementController.RenameGroupRequest;
+import com.ptu.backend.academic.web.AcademicManagementController.RenameDepartmentRequest;
 import com.ptu.backend.academic.web.AcademicManagementController.SetActiveRequest;
 import com.ptu.backend.common.exception.ApiException;
 import com.ptu.backend.user.domain.Role;
@@ -32,6 +36,7 @@ import com.ptu.backend.user.repo.UserRepository;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Sort;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,10 +50,11 @@ public class AcademicManagementService {
 	private final StudyGroupRepository groups;
 	private final TeacherAssignmentRepository assignments;
 	private final UserRepository users;
+	private final JdbcTemplate jdbc;
 
 	public AcademicManagementService(DepartmentRepository departments, DisciplineRepository disciplines,
 			FacultyRepository faculties, SemesterRepository semesters, StudyGroupRepository groups,
-			TeacherAssignmentRepository assignments, UserRepository users) {
+			TeacherAssignmentRepository assignments, UserRepository users, JdbcTemplate jdbc) {
 		this.departments = departments;
 		this.disciplines = disciplines;
 		this.faculties = faculties;
@@ -56,12 +62,54 @@ public class AcademicManagementService {
 		this.groups = groups;
 		this.assignments = assignments;
 		this.users = users;
+		this.jdbc = jdbc;
+	}
+
+	@Transactional(readOnly = true)
+	public List<CatalogItem> faculties() {
+		return faculties.findAll(Sort.by("name")).stream()
+				.map(item -> new CatalogItem(item.getId(), item.getName())).toList();
+	}
+
+	@Transactional
+	public CatalogItem createFaculty(CreateFacultyRequest request) {
+		try {
+			Faculty faculty = faculties.saveAndFlush(new Faculty(request.name().trim()));
+			return new CatalogItem(faculty.getId(), faculty.getName());
+		}
+		catch (DataIntegrityViolationException exception) {
+			throw ApiException.conflict("Факультет с таким названием уже существует");
+		}
+	}
+
+	@Transactional
+	public void deleteFaculty(UUID facultyId) {
+		Faculty faculty = faculties.findById(facultyId)
+				.orElseThrow(() -> ApiException.notFound("Факультет не найден"));
+		if (groups.existsByFacultyId(facultyId)) {
+			throw ApiException.conflict("Сначала удалите группы факультета");
+		}
+		faculties.delete(faculty);
 	}
 
 	@Transactional(readOnly = true)
 	public List<CatalogItem> departments() {
 		return departments.findAll(Sort.by("name")).stream()
 				.map(item -> new CatalogItem(item.getId(), item.getName())).toList();
+	}
+
+	@Transactional
+	public CatalogItem renameDepartment(UUID departmentId, RenameDepartmentRequest request) {
+		Department department = departments.findById(departmentId)
+				.orElseThrow(() -> ApiException.notFound("Кафедра не найдена"));
+		department.setName(request.name().trim());
+		try {
+			Department saved = departments.saveAndFlush(department);
+			return new CatalogItem(saved.getId(), saved.getName());
+		}
+		catch (DataIntegrityViolationException exception) {
+			throw ApiException.conflict("Кафедра с таким названием уже существует");
+		}
 	}
 
 	@Transactional(readOnly = true)
@@ -107,6 +155,26 @@ public class AcademicManagementService {
 		catch (DataIntegrityViolationException exception) {
 			throw ApiException.conflict("Учебная группа с таким названием уже существует");
 		}
+	}
+
+	@Transactional
+	public void deleteGroup(UUID groupId) {
+		StudyGroup group = groups.findById(groupId)
+				.orElseThrow(() -> ApiException.notFound("Группа не найдена"));
+		Integer references = jdbc.queryForObject("""
+				select
+					(select count(*) from student_profiles where group_id = ?) +
+					(select count(*) from teacher_assignments where group_id = ?) +
+					(select count(*) from campus_schedule_entries where group_id = ?) +
+					(select count(*) from campus_event_group_registrations where group_id = ?) +
+					(select count(*) from campus_group_confirmations where group_id = ?) +
+					(select count(*) from teacher_invite_assignments where group_id = ?) +
+					(select count(*) from registration_requests where group_id = ?)
+				""", Integer.class, groupId, groupId, groupId, groupId, groupId, groupId, groupId);
+		if (references != null && references > 0) {
+			throw ApiException.conflict("Нельзя удалить группу, пока с ней связаны учащиеся, назначения или записи");
+		}
+		groups.delete(group);
 	}
 
 	@Transactional(readOnly = true)

@@ -29,12 +29,16 @@ import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
 import ScheduleRoundedIcon from '@mui/icons-material/ScheduleRounded';
-import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
 import PersonAddAltRoundedIcon from '@mui/icons-material/PersonAddAltRounded';
+import EditRoundedIcon from '@mui/icons-material/EditRounded';
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
+import NotificationsActiveRoundedIcon from '@mui/icons-material/NotificationsActiveRounded';
+import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
 import { Link, useLocation } from 'react-router-dom';
 import { useCampusWorkflow, type CampusEvent, type InventoryItem, type PassReward, type ScheduleEntry } from '../data/campus-workflow';
 import { createCertificateRequest, downloadCertificateDocument, listCertificates, listMyCertificates, updateCertificateRequestStatus, uploadCertificateDocument, type CertificateRequestView, type CertificateStatus, type CertificateType } from '../api/certificates';
 import { useAuth } from '../auth/AuthProvider';
+import { listManagedTeachers, type ManagedTeacher } from '../api/administration';
 
 const certificateTypeLabels: Record<CertificateType, string> = {
   EDUCATION: 'Справка об обучении',
@@ -1321,89 +1325,250 @@ export function CertificateManagementPage() {
   );
 }
 
-const weekdays = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+const weekdays = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
 
-export function ScheduleManagementPage() {
-  const { scheduleEntries, createScheduleEntry, campusGroups, error: workflowError } = useCampusWorkflow();
-  const [weekday, setWeekday] = useState('Понедельник');
-  const [startTime, setStartTime] = useState('09:00');
-  const [endTime, setEndTime] = useState('10:30');
-  const [group, setGroup] = useState('');
-  const [subject, setSubject] = useState('');
-  const [teacher, setTeacher] = useState('');
-  const [room, setRoom] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+interface ScheduleDraft {
+  id?: string;
+  weekday: string;
+  startTime: string;
+  endTime: string;
+  groupId: string;
+  subject: string;
+  teacherId: string;
+  room: string;
+}
+
+const defaultPeriods = [
+  ['09:00', '10:30'],
+  ['10:45', '12:15'],
+  ['12:30', '14:00'],
+  ['14:15', '15:45'],
+  ['16:00', '17:30'],
+];
+
+function ScheduleWeek({ editable }: { editable: boolean }) {
+  const { scheduleEntries, campusGroups, saveScheduleEntry, deleteScheduleEntry, updateScheduleTimeSlot, isLoading } = useCampusWorkflow();
+  const [teachers, setTeachers] = useState<ManagedTeacher[]>([]);
+  const [draft, setDraft] = useState<ScheduleDraft | null>(null);
+  const [periodTimes, setPeriodTimes] = useState<Record<string, { startTime: string; endTime: string }>>({});
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const actionLock = useRef(false);
 
-  async function handleCreate(event: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    if (!editable) return;
+    let active = true;
+    void listManagedTeachers()
+      .then((items) => { if (active) setTeachers(items.filter((teacher) => teacher.active)); })
+      .catch((loadError: unknown) => { if (active) setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить список преподавателей.'); });
+    return () => { active = false; };
+  }, [editable]);
+
+  const periods = Array.from(new Map([
+    ...defaultPeriods,
+    ...scheduleEntries.map((entry) => [entry.startTime, entry.endTime]),
+  ].map(([start, end]) => [`${start}-${end}`, { startTime: start, endTime: end }])).values())
+    .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+  async function submitDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (actionLock.current) return;
-    actionLock.current = true;
-    setIsLoading(true);
+    if (!draft || busy) return;
+    setBusy(true);
     setError('');
     setSuccess('');
     try {
-      await createScheduleEntry({ weekday, startTime, endTime, group, subject, teacher, room });
-      setSuccess('Занятие добавлено в расписание.');
-      setSubject('');
-      setTeacher('');
-      setRoom('');
-    } catch (createError) {
-      setError(createError instanceof Error ? createError.message : 'Не удалось добавить занятие.');
+      const group = campusGroups.find((item) => item.id === draft.groupId);
+      const teacher = teachers.find((item) => item.id === draft.teacherId);
+      if (!group || !teacher) throw new Error('Выберите группу и действующего преподавателя из списка.');
+      await saveScheduleEntry({
+        weekday: draft.weekday,
+        startTime: draft.startTime,
+        endTime: draft.endTime,
+        groupId: group.id,
+        group: group.name,
+        subject: draft.subject.trim(),
+        teacherId: teacher.id,
+        teacher: teacher.fullName,
+        room: draft.room.trim(),
+      }, draft.id);
+      setDraft(null);
+      setSuccess(draft.id ? 'Изменение расписания сохранено. Студенты группы получат уведомление.' : 'Занятие добавлено. Студенты группы получат уведомление.');
+    } catch (saveError: unknown) {
+      setError(saveError instanceof Error ? saveError.message : 'Не удалось сохранить занятие.');
     } finally {
-      actionLock.current = false;
-      setIsLoading(false);
+      setBusy(false);
+    }
+  }
+
+  async function removeEntry(entry: ScheduleEntry) {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    setSuccess('');
+    try {
+      await deleteScheduleEntry(entry.id);
+      setSuccess('Занятие отменено. Студенты группы получат уведомление.');
+    } catch (deleteError: unknown) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Не удалось отменить занятие.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function savePeriodTime(oldStart: string, oldEnd: string) {
+    const updated = periodTimes[`${oldStart}-${oldEnd}`];
+    if (!updated || updated.startTime >= updated.endTime) {
+      setError('Время окончания должно быть позже времени начала.');
+      return;
+    }
+    const entries = scheduleEntries.filter((entry) => entry.startTime === oldStart && entry.endTime === oldEnd);
+    if (!entries.length || busy) return;
+    setBusy(true);
+    setError('');
+    setSuccess('');
+    try {
+      await updateScheduleTimeSlot({
+        previousStartTime: oldStart,
+        previousEndTime: oldEnd,
+        startTime: updated.startTime,
+        endTime: updated.endTime,
+      });
+      setSuccess('Время пары обновлено для всех дней недели; студентам отправлены уведомления.');
+    } catch (updateError: unknown) {
+      setError(updateError instanceof Error ? updateError.message : 'Не удалось изменить время пары.');
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
-    <Box className="campus-page">
-      <PageHeader title="Расписание занятий">
-      </PageHeader>
-      {workflowError && <Alert severity="error">{workflowError}</Alert>}
-      <SectionCard title="Добавить занятие" icon={<CalendarMonthRoundedIcon />}>
-        <Box component="form" onSubmit={handleCreate} className="schedule-entry-form">
-          <TextField select label="День недели" value={weekday} onChange={(event) => setWeekday(event.target.value)} required>
-            {weekdays.map((day) => <MenuItem key={day} value={day}>{day}</MenuItem>)}
-          </TextField>
-          <TextField select label="Группа" value={group} onChange={(event) => setGroup(event.target.value)} required>
-            {campusGroups.map((campusGroup) => <MenuItem key={campusGroup.name} value={campusGroup.name}>{campusGroup.name}</MenuItem>)}
-          </TextField>
-          <TextField label="Дисциплина" value={subject} onChange={(event) => setSubject(event.target.value)} required />
-          <TextField label="Преподаватель" value={teacher} onChange={(event) => setTeacher(event.target.value)} required />
-          <TextField label="Начало" type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} required InputLabelProps={{ shrink: true }} />
-          <TextField label="Окончание" type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} required InputLabelProps={{ shrink: true }} />
-          <TextField label="Аудитория" value={room} onChange={(event) => setRoom(event.target.value)} required />
-          {error && <Alert severity="error" className="schedule-form-message">{error}</Alert>}
-          {success && <Alert severity="success" className="schedule-form-message">{success}</Alert>}
-          <Button type="submit" variant="contained" disabled={isLoading || campusGroups.length === 0} startIcon={isLoading ? <CircularProgress size={18} color="inherit" /> : <AddRoundedIcon />}>
-            {isLoading ? 'Добавляем…' : 'Добавить в расписание'}
-          </Button>
+    <>
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
+      <Box sx={{ overflowX: 'auto', border: 1, borderColor: 'divider', borderRadius: 2 }}>
+        <Box component="table" className="schedule-week-table">
+          <thead>
+            <tr>
+              <th>Время</th>
+              {weekdays.map((day) => <th key={day}>{day}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {periods.map((period) => {
+              const periodKey = `${period.startTime}-${period.endTime}`;
+              const times = periodTimes[periodKey] ?? period;
+              return (
+                <tr key={periodKey}>
+                  <th className="schedule-week-time">
+                    {editable ? (
+                      <Stack spacing={0.75} sx={{ minWidth: 112 }}>
+                        <TextField aria-label={`Начало пары ${period.startTime}`} type="time" size="small" value={times.startTime} onChange={(event) => setPeriodTimes((current) => ({ ...current, [periodKey]: { ...times, startTime: event.target.value } }))} />
+                        <TextField aria-label={`Окончание пары ${period.endTime}`} type="time" size="small" value={times.endTime} onChange={(event) => setPeriodTimes((current) => ({ ...current, [periodKey]: { ...times, endTime: event.target.value } }))} />
+                        {(times.startTime !== period.startTime || times.endTime !== period.endTime) && (
+                          <Button size="small" disabled={busy} onClick={() => void savePeriodTime(period.startTime, period.endTime)}>Для всех дней</Button>
+                        )}
+                      </Stack>
+                    ) : <Typography fontWeight={750}>{period.startTime}–{period.endTime}</Typography>}
+                  </th>
+                  {weekdays.map((day) => {
+                    const entries = scheduleEntries.filter((entry) => entry.weekday === day && entry.startTime === period.startTime && entry.endTime === period.endTime);
+                    return (
+                      <td key={day}>
+                        <Stack spacing={0.75} minWidth={150}>
+                          {entries.map((entry) => (
+                            <Card variant="outlined" key={entry.id} className="schedule-week-lesson">
+                              <CardContent sx={{ p: 1.25, '&:last-child': { pb: 1.25 } }}>
+                                <Typography fontWeight={750} variant="body2">{entry.subject}</Typography>
+                                <Typography variant="caption" color="text.secondary">{entry.group} · {entry.teacher} · {entry.room}</Typography>
+                                {editable && <Stack direction="row" spacing={0.5} mt={0.75}>
+                                  <Button size="small" startIcon={<EditRoundedIcon />} onClick={() => setDraft({ ...entry, teacherId: entry.teacherId ?? '' })}>Изменить</Button>
+                                  <Button size="small" color="error" aria-label={`Отменить ${entry.subject} ${entry.group}`} disabled={busy} onClick={() => void removeEntry(entry)}><DeleteOutlineRoundedIcon /></Button>
+                                </Stack>}
+                              </CardContent>
+                            </Card>
+                          ))}
+                          {editable && (
+                            <Button size="small" startIcon={<AddRoundedIcon />} onClick={() => setDraft({
+                              weekday: day, startTime: period.startTime, endTime: period.endTime,
+                              groupId: campusGroups[0]?.id ?? '', subject: '', teacherId: teachers[0]?.id ?? '', room: '',
+                            })}>Добавить пару</Button>
+                          )}
+                        </Stack>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
         </Box>
+      </Box>
+      {scheduleEntries.length === 0 && !isLoading && <Typography color="text.secondary" mt={2}>Расписание пока не заполнено.</Typography>}
+      <Dialog open={draft !== null} onClose={() => !busy && setDraft(null)} fullWidth maxWidth="sm">
+        <Box component="form" onSubmit={(event) => void submitDraft(event)}>
+          <DialogTitle>{draft?.id ? 'Изменить занятие' : 'Добавить занятие'}</DialogTitle>
+          <DialogContent>
+            {draft && <Stack spacing={1.5} mt={1}>
+              <TextField select label="День недели" value={draft.weekday} onChange={(event) => setDraft({ ...draft, weekday: event.target.value })}>
+                {weekdays.map((day) => <MenuItem key={day} value={day}>{day}</MenuItem>)}
+              </TextField>
+              <Stack direction="row" spacing={1}>
+                <TextField label="Начало" type="time" value={draft.startTime} onChange={(event) => setDraft({ ...draft, startTime: event.target.value })} InputLabelProps={{ shrink: true }} fullWidth />
+                <TextField label="Окончание" type="time" value={draft.endTime} onChange={(event) => setDraft({ ...draft, endTime: event.target.value })} InputLabelProps={{ shrink: true }} fullWidth />
+              </Stack>
+              <TextField select label="Группа" value={draft.groupId} onChange={(event) => setDraft({ ...draft, groupId: event.target.value })} required>
+                {campusGroups.map((group) => <MenuItem key={group.id} value={group.id}>{group.name}</MenuItem>)}
+              </TextField>
+              <TextField select label="Преподаватель" value={draft.teacherId} onChange={(event) => setDraft({ ...draft, teacherId: event.target.value })} required>
+                {teachers.map((teacher) => <MenuItem key={teacher.id} value={teacher.id}>{teacher.fullName}</MenuItem>)}
+              </TextField>
+              <TextField label="Дисциплина" value={draft.subject} onChange={(event) => setDraft({ ...draft, subject: event.target.value })} required />
+              <TextField label="Аудитория" value={draft.room} onChange={(event) => setDraft({ ...draft, room: event.target.value })} required />
+            </Stack>}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setDraft(null)} disabled={busy}>Отмена</Button>
+            <Button type="submit" variant="contained" disabled={busy || !draft || !teachers.length || !campusGroups.length} startIcon={busy ? <CircularProgress size={18} color="inherit" /> : <SaveRoundedIcon />}>Сохранить</Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
+    </>
+  );
+}
+
+export function ScheduleManagementPage() {
+  const { error: workflowError } = useCampusWorkflow();
+  return (
+    <Box className="campus-page">
+      <PageHeader title="Расписание занятий" />
+      {workflowError && <Alert severity="error">{workflowError}</Alert>}
+      <SectionCard title="Недельная сетка — изменения сохраняются сразу" icon={<CalendarMonthRoundedIcon />}>
+        <ScheduleWeek editable />
       </SectionCard>
-      <SectionCard title="Недельное расписание" icon={<ScheduleRoundedIcon />}>
-        <Stack spacing={2} className="weekly-schedule">
-          {weekdays.map((day) => {
-            const dayEntries = scheduleEntries.filter((entry) => entry.weekday === day).sort((a, b) => a.startTime.localeCompare(b.startTime));
-            if (!dayEntries.length) return null;
-            return (
-              <Box className="schedule-day" key={day}>
-                <Typography variant="subtitle1" fontWeight={750}>{day}</Typography>
-                <Stack spacing={1}>
-                  {dayEntries.map((entry: ScheduleEntry) => (
-                    <Box className="schedule-entry" key={entry.id}>
-                      <Box className="schedule-entry-time"><Typography fontWeight={750}>{entry.startTime}</Typography><Typography variant="caption">до {entry.endTime}</Typography></Box>
-                      <Box className="schedule-entry-info"><Typography fontWeight={700}>{entry.subject}</Typography><Typography variant="body2" color="text.secondary">{entry.group} · {entry.teacher}</Typography></Box>
-                      <Chip size="small" icon={<PlaceRoundedIcon />} label={entry.room} className="subtle-chip" />
-                    </Box>
-                  ))}
-                </Stack>
-              </Box>
-            );
-          })}
-        </Stack>
+    </Box>
+  );
+}
+
+export function StudentSchedulePage() {
+  const { scheduleChanges, error: workflowError } = useCampusWorkflow();
+  return (
+    <Box className="campus-page">
+      <PageHeader title="Моё расписание" />
+      {workflowError && <Alert severity="error">{workflowError}</Alert>}
+      {scheduleChanges.length > 0 && (
+        <SectionCard title="Изменения расписания" icon={<NotificationsActiveRoundedIcon />}>
+          <Stack spacing={1}>
+            {scheduleChanges.map((change) => (
+              <Alert key={change.id} severity={change.type === 'CANCELLED' ? 'warning' : 'info'}>
+                <Typography fontWeight={750}>{change.groupName} · {formatDate(change.createdAt)}</Typography>
+                <Typography variant="body2">{change.message}</Typography>
+              </Alert>
+            ))}
+          </Stack>
+        </SectionCard>
+      )}
+      <SectionCard title="Расписание на неделю" icon={<ScheduleRoundedIcon />}>
+        <ScheduleWeek editable={false} />
       </SectionCard>
     </Box>
   );

@@ -36,6 +36,7 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     const status = error.response?.status;
+    const isLoginRequest = error.config?.url?.replace(/^\//, '').startsWith('auth/login') ?? false;
     const apiMessage = (error.response?.data as { message?: unknown } | undefined)?.message;
     const message = typeof apiMessage === 'string' ? apiMessage : undefined;
     const messages: Partial<Record<number, string>> = {
@@ -45,7 +46,7 @@ apiClient.interceptors.response.use(
     };
     const errorMessage = message ?? (status ? messages[status] : undefined);
 
-    if (errorMessage && (status === 401 || status === 403 || status === 429)) {
+    if (!isLoginRequest && errorMessage && (status === 401 || status === 403 || status === 429)) {
       if (status === 401 && window.sessionStorage.getItem('ptu-social-auth-session')) {
         window.sessionStorage.removeItem('ptu-social-auth-session');
         window.dispatchEvent(new Event('app:auth-expired'));

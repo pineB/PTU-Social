@@ -123,10 +123,20 @@ export interface ScheduleEntry {
   weekday: string;
   startTime: string;
   endTime: string;
+  groupId: string;
   group: string;
   subject: string;
+  teacherId: string | null;
   teacher: string;
   room: string;
+}
+
+export interface ScheduleChange {
+  id: string;
+  type: 'ADDED' | 'CHANGED' | 'CANCELLED';
+  message: string;
+  groupName: string;
+  createdAt: string;
 }
 
 export interface PassReward {
@@ -267,6 +277,29 @@ export async function getCampusSchedule(): Promise<ScheduleEntry[]> {
 
 export async function createCampusScheduleEntry(entry: Omit<ScheduleEntry, 'id'>): Promise<ScheduleEntry> {
   const response = await apiClient.post<ScheduleEntry>('/campus/schedule', entry);
+  return response.data;
+}
+
+export async function updateCampusScheduleEntry(id: string, entry: Omit<ScheduleEntry, 'id'>): Promise<ScheduleEntry> {
+  const response = await apiClient.put<ScheduleEntry>(`/campus/schedule/${id}`, entry);
+  return response.data;
+}
+
+export async function deleteCampusScheduleEntry(id: string): Promise<void> {
+  await apiClient.delete(`/campus/schedule/${id}`);
+}
+
+export async function updateCampusScheduleTimeSlot(request: {
+  previousStartTime: string;
+  previousEndTime: string;
+  startTime: string;
+  endTime: string;
+}): Promise<void> {
+  await apiClient.patch('/campus/schedule/time-slot', request);
+}
+
+export async function getCampusScheduleChanges(): Promise<ScheduleChange[]> {
+  const response = await apiClient.get<ScheduleChange[]>('/campus/schedule/changes');
   return response.data;
 }
 

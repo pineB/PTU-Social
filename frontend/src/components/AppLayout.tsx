@@ -25,9 +25,6 @@ import RateReviewRoundedIcon from '@mui/icons-material/RateReviewRounded';
 import SpaceDashboardRoundedIcon from '@mui/icons-material/SpaceDashboardRounded';
 import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded';
 import LightModeRoundedIcon from '@mui/icons-material/LightModeRounded';
-import SchoolRoundedIcon from '@mui/icons-material/SchoolRounded';
-import MenuBookRoundedIcon from '@mui/icons-material/MenuBookRounded';
-import AccountBalanceRoundedIcon from '@mui/icons-material/AccountBalanceRounded';
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
 import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
 import FactCheckRoundedIcon from '@mui/icons-material/FactCheckRounded';
@@ -53,14 +50,6 @@ import { useAuth } from '../auth/AuthProvider';
 
 const drawerWidth = 272;
 
-const navigation: { id: RoleId; label: string }[] = [
-  { id: 'student', label: 'Студент' },
-  { id: 'teacher', label: 'Преподаватель' },
-  { id: 'organizer', label: 'Организатор' },
-  { id: 'academic-office', label: 'Учебная часть' },
-  { id: 'admin', label: 'Администратор' },
-];
-
 interface HeaderNotification {
   id: string;
   title: string;
@@ -81,33 +70,13 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
         <Typography className="brand-name">ПТУ-Сошиал</Typography>
       </Box>
 
-      {role !== 'academic-office' && <Box className="workspace-switcher">
-        {navigation.filter((item) => item.id === role).map((item) => {
-          const active = role === item.id;
-          return (
-            <Button
-              key={item.id}
-              component={NavLink}
-              to={`/${item.id}`}
-              onClick={onNavigate}
-              className={`workspace-link${active ? ' workspace-link-active' : ''}`}
-              aria-label={item.label}
-              aria-current={active ? 'page' : undefined}
-            >
-              <Box className="workspace-icon">
-                {item.id === 'student' ? <SchoolRoundedIcon /> : item.id === 'teacher' ? <MenuBookRoundedIcon /> : item.id === 'organizer' ? <EventAvailableRoundedIcon /> : item.id === 'admin' ? <AdminPanelSettingsRoundedIcon /> : <AccountBalanceRoundedIcon />}
-              </Box>
-              <Typography>{item.label}</Typography>
-            </Button>
-          );
-        })}
-      </Box>}
-
       <List disablePadding className="sidebar-page-links">
-        <ListItemButton component={NavLink} to={`/${role}`} onClick={onNavigate} className={`role-link${isActive(`/${role}`) ? ' role-link-active' : ''}`} aria-current={isActive(`/${role}`) ? 'page' : undefined}>
-          <ListItemIcon className="role-icon"><SpaceDashboardRoundedIcon /></ListItemIcon>
-          <ListItemText primary="Обзор" />
-        </ListItemButton>
+        {role !== 'admin' && (
+          <ListItemButton component={NavLink} to={`/${role}`} onClick={onNavigate} className={`role-link${isActive(`/${role}`) ? ' role-link-active' : ''}`} aria-current={isActive(`/${role}`) ? 'page' : undefined}>
+            <ListItemIcon className="role-icon"><SpaceDashboardRoundedIcon /></ListItemIcon>
+            <ListItemText primary="Обзор" />
+          </ListItemButton>
+        )}
         {role === 'student' && (
           <ListItemButton
             component={NavLink}
@@ -197,6 +166,10 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
         )}
         {role === 'student' && (
           <>
+            <ListItemButton component={NavLink} to="/student/schedule" onClick={onNavigate} className={`role-link${isActive('/student/schedule') ? ' role-link-active' : ''}`} aria-label="Расписание занятий" aria-current={isActive('/student/schedule') ? 'page' : undefined}>
+              <ListItemIcon className="role-icon"><CalendarMonthRoundedIcon /></ListItemIcon>
+              <ListItemText primary="Расписание" />
+            </ListItemButton>
             <ListItemButton component={NavLink} to="/student/events" onClick={onNavigate} className={`role-link${isActive('/student/events') ? ' role-link-active' : ''}`} aria-label="Мероприятия" aria-current={isActive('/student/events') ? 'page' : undefined}>
               <ListItemIcon className="role-icon"><EventAvailableRoundedIcon /></ListItemIcon>
               <ListItemText primary="Мероприятия" primaryTypographyProps={{ fontWeight: location.pathname === '/student/events' ? 700 : 600, fontSize: 14 }} />
@@ -246,7 +219,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { session, currentUser, profileError, logout } = useAuth();
-  const { walletBalance, isGroupLeader, groupConfirmations, events, error: campusError } = useCampusWorkflow();
+  const { walletBalance, isGroupLeader, groupConfirmations, events, scheduleChanges, error: campusError } = useCampusWorkflow();
   const role: RoleId = session?.role === 'TEACHER'
     ? 'teacher'
     : session?.role === 'ORGANIZER'
@@ -257,8 +230,8 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
           ? 'admin'
           : 'student';
   const profile = dashboards[role];
-  const profileName = currentUser?.fullName || session?.email || '';
-  const roleCaption = currentUser?.groupName
+  const profileName = currentUser?.fullName?.trim() || session?.email || 'Пользователь';
+  const roleCaption = role === 'student' && currentUser?.groupName
     ? `${currentUser.groupName} · студент`
     : role === 'teacher'
       ? 'Преподаватель'
@@ -280,6 +253,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
     '/student/battle-pass': 'ПТУ-пасс',
     '/student/inventory': 'Инвентарь',
     '/student/certificates': 'Справки',
+    '/student/schedule': 'Моё расписание',
     '/academic-office/management': 'Группы и преподаватели',
     '/teacher/submissions': 'Сдачи студентов',
     '/teacher/students': 'Мои студенты',
@@ -290,7 +264,13 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
   };
   const pageTitle = pageTitles[location.pathname]
     ?? (location.pathname.startsWith('/student/people/') ? 'Профиль студента' : profile.title);
-  const profileInitials = profileName.slice(0, 2).toLocaleUpperCase('ru');
+  const profileInitials = profileName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toLocaleUpperCase('ru');
   const closeMobile = () => setMobileOpen(false);
   const { mode, toggleMode } = useColorMode();
   const { assignments, submissions } = useTaskWorkflow();
@@ -299,6 +279,15 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
   const notifications: HeaderNotification[] = [];
 
   if (role === 'student') {
+    scheduleChanges.slice(0, 6).forEach((change) => {
+      notifications.push({
+        id: `schedule-${change.id}`,
+        title: `Изменение расписания · ${change.groupName}`,
+        description: change.message,
+        to: '/student/schedule',
+        icon: <CalendarMonthRoundedIcon />,
+      });
+    });
     assignments.filter((assignment) => assignment.status === 'submitted').forEach((assignment) => {
       notifications.push({
         id: `assignment-${assignment.id}`,

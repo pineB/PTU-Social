@@ -7,11 +7,13 @@ import {
   confirmCampusEventGroup,
   createCampusEvent,
   createCampusScheduleEntry,
+  deleteCampusScheduleEntry,
   getBattlePass,
   getCampusCatalog,
   getCampusGroups,
   getCampusInventory,
   getCampusSchedule,
+  getCampusScheduleChanges,
   getMyGroupConfirmation,
   getWallet,
   joinCampusEvent,
@@ -23,6 +25,8 @@ import {
   purchasePremiumPass as purchasePremiumPassRequest,
   requestCampusGroupMembership,
   submitCampusEventReview,
+  updateCampusScheduleEntry,
+  updateCampusScheduleTimeSlot as updateCampusScheduleTimeSlotRequest,
   updateGroupConfirmation,
   type ActivityAward,
   type CampusCaseReward,
@@ -36,6 +40,7 @@ import {
   type InventoryItem,
   type PassReward,
   type ScheduleEntry,
+  type ScheduleChange,
   type WalletTransaction,
 } from '../api/campus';
 import { useAuth } from '../auth/AuthProvider';
@@ -52,6 +57,7 @@ export type {
   GroupStudent,
   InventoryItem,
   PassReward,
+  ScheduleChange,
   ScheduleEntry,
   WalletTransaction,
 };
@@ -79,6 +85,7 @@ interface CampusWorkflowValue {
   caseOpeningPrice: number | null;
   campusCaseRewards: CampusCaseReward[];
   scheduleEntries: ScheduleEntry[];
+  scheduleChanges: ScheduleChange[];
   isLoading: boolean;
   error: string;
   refresh: () => Promise<void>;
@@ -95,7 +102,14 @@ interface CampusWorkflowValue {
   purchasePremiumPass: () => Promise<void>;
   claimPassReward: (rewardId: string) => Promise<void>;
   openCase: (caseId: string) => Promise<InventoryItem>;
-  createScheduleEntry: (entry: Omit<ScheduleEntry, 'id'>) => Promise<void>;
+  saveScheduleEntry: (entry: Omit<ScheduleEntry, 'id'>, id?: string) => Promise<void>;
+  deleteScheduleEntry: (id: string) => Promise<void>;
+  updateScheduleTimeSlot: (request: {
+    previousStartTime: string;
+    previousEndTime: string;
+    startTime: string;
+    endTime: string;
+  }) => Promise<void>;
 }
 
 const CampusWorkflowContext = createContext<CampusWorkflowValue | null>(null);
@@ -117,11 +131,12 @@ export function CampusWorkflowProvider({ children }: { children: ReactNode }) {
   const [caseOpeningPrice, setCaseOpeningPrice] = useState<number | null>(null);
   const [campusCaseRewards, setCampusCaseRewards] = useState<CampusCaseReward[]>([]);
   const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([]);
+  const [scheduleChanges, setScheduleChanges] = useState<ScheduleChange[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
   const refresh = useCallback(async () => {
-    if (!session || !currentUser) {
+    if (!session || !currentUser || session.role === 'ADMIN') {
       setEvents([]);
       setStudents([]);
       setCampusGroups([]);
@@ -137,6 +152,9 @@ export function CampusWorkflowProvider({ children }: { children: ReactNode }) {
       setCaseOpeningPrice(null);
       setCampusCaseRewards([]);
       setScheduleEntries([]);
+      setScheduleChanges([]);
+      setError('');
+      setIsLoading(false);
       return;
     }
 
@@ -162,6 +180,7 @@ export function CampusWorkflowProvider({ children }: { children: ReactNode }) {
           setCaseOpeningPrice(catalog.caseOpeningPrice);
         }, () => undefined),
         ...(session.role === 'STUDENT' ? [
+          load(getCampusScheduleChanges, setScheduleChanges),
           load(getMyGroupConfirmation, setMyGroupConfirmation),
           load(async () => {
             const wallet = await getWallet();
@@ -257,6 +276,7 @@ export function CampusWorkflowProvider({ children }: { children: ReactNode }) {
     caseOpeningPrice,
     campusCaseRewards,
     scheduleEntries,
+    scheduleChanges,
     isLoading,
     error,
     refresh,
@@ -288,11 +308,15 @@ export function CampusWorkflowProvider({ children }: { children: ReactNode }) {
       await refresh();
       return reward;
     },
-    createScheduleEntry: (entry) => runAndRefresh(() => createCampusScheduleEntry(entry)),
+    saveScheduleEntry: (entry, id) => runAndRefresh(() => id
+      ? updateCampusScheduleEntry(id, entry)
+      : createCampusScheduleEntry(entry)),
+    deleteScheduleEntry: (id) => runAndRefresh(() => deleteCampusScheduleEntry(id)),
+    updateScheduleTimeSlot: (request) => runAndRefresh(() => updateCampusScheduleTimeSlotRequest(request)),
   }), [
     isGroupLeader, students, teacherGroups, campusGroups, groupLeaders, events, groupConfirmations, myGroupConfirmation, activityAwards,
     currentUser, passExperience, premiumPassOwned, premiumPassPrice, passRewards, walletBalance, transactions,
-    inventory, caseOpeningPrice, campusCaseRewards, scheduleEntries, isLoading, error, refresh, runAndRefresh,
+    inventory, caseOpeningPrice, campusCaseRewards, scheduleEntries, scheduleChanges, isLoading, error, refresh, runAndRefresh,
   ]);
 
   return <CampusWorkflowContext.Provider value={value}>{children}</CampusWorkflowContext.Provider>;

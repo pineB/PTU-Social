@@ -66,12 +66,26 @@ export async function createAcademicOfficeUser(request: CreateAcademicOfficeUser
 }
 
 export async function getAcademicFaculties(): Promise<CatalogItem[]> {
-  const response = await apiClient.get<CatalogItem[]>('/academic/faculties');
+  const response = await apiClient.get<CatalogItem[]>('/academic/management/faculties');
   return response.data;
+}
+
+export async function createAcademicFaculty(name: string): Promise<CatalogItem> {
+  const response = await apiClient.post<CatalogItem>('/academic/management/faculties', { name });
+  return response.data;
+}
+
+export async function deleteAcademicFaculty(facultyId: string): Promise<void> {
+  await apiClient.delete(`/academic/management/faculties/${facultyId}`);
 }
 
 export async function getAcademicDepartments(): Promise<CatalogItem[]> {
   const response = await apiClient.get<CatalogItem[]>('/academic/management/departments');
+  return response.data;
+}
+
+export async function renameAcademicDepartment(departmentId: string, name: string): Promise<CatalogItem> {
+  const response = await apiClient.patch<CatalogItem>(`/academic/management/departments/${departmentId}`, { name });
   return response.data;
 }
 
@@ -93,6 +107,10 @@ export async function createManagedGroup(name: string, facultyId: string): Promi
 export async function renameManagedGroup(groupId: string, name: string): Promise<ManagedGroup> {
   const response = await apiClient.patch<ManagedGroup>(`/academic/management/groups/${groupId}`, { name });
   return response.data;
+}
+
+export async function deleteManagedGroup(groupId: string): Promise<void> {
+  await apiClient.delete(`/academic/management/groups/${groupId}`);
 }
 
 export async function createTeacherInvite(request: CreateTeacherInviteRequest): Promise<TeacherInviteCreatedResponse> {

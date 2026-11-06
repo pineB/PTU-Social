@@ -1,6 +1,8 @@
 package com.ptu.backend.dev;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.Locale;
 
 import com.ptu.backend.academic.domain.Department;
 import com.ptu.backend.academic.domain.Discipline;
@@ -27,7 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Idempotent development data: reference data and an academic office account.
+ * Idempotent development data: reference data and local staff accounts.
  */
 @Slf4j
 @Component
@@ -90,7 +92,37 @@ public class DevDataSeeder implements ApplicationRunner {
 			users.save(office);
 			log.info("Dev seeder: created academic office account {}", officeEmail);
 		}
+		adminAccount();
 		log.info("Dev seeder finished");
+	}
+
+	private void adminAccount() {
+		String configuredEmail = properties.seed().adminEmail();
+		String password = properties.seed().adminPassword();
+		if (configuredEmail == null || configuredEmail.isBlank() || password == null) {
+			throw new IllegalStateException("Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD for the dev profile");
+		}
+		String email = configuredEmail.trim().toLowerCase(Locale.ROOT);
+		int passwordBytes = password.getBytes(StandardCharsets.UTF_8).length;
+		if (passwordBytes < 12 || passwordBytes > 72) {
+			throw new IllegalStateException("SEED_ADMIN_PASSWORD must be 12-72 UTF-8 bytes");
+		}
+
+		var existing = users.findByEmailIgnoreCase(email);
+		if (existing.isPresent()) {
+			if (existing.get().getRole() != Role.ADMIN) {
+				throw new IllegalStateException("SEED_ADMIN_EMAIL belongs to a non-admin user");
+			}
+			return;
+		}
+
+		User admin = new User();
+		admin.setEmail(email);
+		admin.setFullName("Тестовый администратор");
+		admin.setPasswordHash(passwordEncoder.encode(password));
+		admin.setRole(Role.ADMIN);
+		users.save(admin);
+		log.info("Dev seeder: created admin account {}", email);
 	}
 
 	private Faculty faculty(String name) {
