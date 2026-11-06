@@ -10,7 +10,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-@Entity
+@Entity(name = "LegacyDiscipline")
 @Table(name = "legacy_disciplines")
 @Getter
 @Setter

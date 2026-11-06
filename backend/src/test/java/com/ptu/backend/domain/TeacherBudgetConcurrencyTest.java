@@ -3,8 +3,6 @@ package com.ptu.backend.domain;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -22,10 +20,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-@DataJpaTest
-@Import(TeacherBudgetService.class)
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
-class TeacherBudgetConcurrencyTest {
+class TeacherBudgetConcurrencyTest extends com.ptu.backend.support.AbstractIntegrationTest {
 
     @Autowired
     private TeacherBudgetRepository teacherBudgetRepository;

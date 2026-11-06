@@ -13,7 +13,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-@Entity
+@Entity(name = "LegacyTeacherAssignment")
 @Table(name = "legacy_teacher_assignments")
 @Getter
 @Setter

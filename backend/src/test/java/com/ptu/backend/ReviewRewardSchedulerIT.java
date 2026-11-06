@@ -15,11 +15,9 @@ import com.ptu.backend.wallet.service.WalletService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.jdbc.Sql;
 import org.springframework.transaction.annotation.Transactional;
 
 @Transactional
-@Sql(scripts = "/db/test/reviews-stub.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS)
 class ReviewRewardSchedulerIT extends AbstractIntegrationTest {
 
 	@Autowired
@@ -84,8 +82,8 @@ class ReviewRewardSchedulerIT extends AbstractIntegrationTest {
 
 	private long insertReview(UUID authorId, String status, boolean rewardAwarded) {
 		Long id = jdbc.queryForObject(
-				"insert into reviews (author_id, text, rating, status, reward_awarded) "
-						+ "values (?, 'Содержательный отзыв', 5, ?, ?) returning id",
+				"insert into reviews (activity_id, author_id, text, rating, status, reward_awarded) "
+						+ "values (1, ?, 'Содержательный отзыв', 5, ?, ?) returning id",
 				Long.class, authorId, status, rewardAwarded);
 		assertThat(id).isNotNull();
 		return id;
