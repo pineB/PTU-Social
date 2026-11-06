@@ -42,6 +42,7 @@ const roleHomePaths: Record<UserRole, string> = {
   TEACHER: '/teacher',
   ORGANIZER: '/organizer',
   ACADEMIC_OFFICE: '/academic-office',
+  ADMIN: '/admin',
 };
 
 const registrationRequestIdKey = 'ptu-social-registration-request-id';

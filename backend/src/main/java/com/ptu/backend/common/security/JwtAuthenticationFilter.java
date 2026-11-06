@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import io.jsonwebtoken.JwtException;
+import com.ptu.backend.user.repo.UserRepository;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -22,9 +23,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 	private static final String BEARER_PREFIX = "Bearer ";
 
 	private final JwtService jwtService;
+	private final UserRepository users;
 
-	public JwtAuthenticationFilter(JwtService jwtService) {
+	public JwtAuthenticationFilter(JwtService jwtService, UserRepository users) {
 		this.jwtService = jwtService;
+		this.users = users;
 	}
 
 	@Override
@@ -35,10 +38,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 				&& SecurityContextHolder.getContext().getAuthentication() == null) {
 			try {
 				UserPrincipal principal = jwtService.parse(header.substring(BEARER_PREFIX.length()));
-				UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-						principal, null, principal.getAuthorities());
-				authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-				SecurityContextHolder.getContext().setAuthentication(authentication);
+				if (users.existsByIdAndActiveTrue(principal.id())) {
+					UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+							principal, null, principal.getAuthorities());
+					authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+					SecurityContextHolder.getContext().setAuthentication(authentication);
+				}
 			}
 			catch (JwtException | IllegalArgumentException ex) {
 				logger.debug("Invalid JWT token", ex);

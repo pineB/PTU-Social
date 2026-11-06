@@ -40,6 +40,7 @@ public class SecurityConfig {
 						.requestMatchers("/api/auth/**", "/actuator/health/**", "/actuator/info").permitAll()
 						.requestMatchers("/api/academic/faculties/**").permitAll()
 						.requestMatchers("/api/academic/teacher-invites/**").hasRole("ACADEMIC_OFFICE")
+						.requestMatchers("/api/admin/**").hasRole("ADMIN")
 						.anyRequest().authenticated())
 				.exceptionHandling(handling -> handling
 						.authenticationEntryPoint(new RestAuthenticationEntryPoint(objectMapper))

@@ -1,6 +1,6 @@
 import apiClient from './client';
 
-export type UserRole = 'STUDENT' | 'TEACHER' | 'ORGANIZER' | 'ACADEMIC_OFFICE';
+export type UserRole = 'STUDENT' | 'TEACHER' | 'ORGANIZER' | 'ACADEMIC_OFFICE' | 'ADMIN';
 
 export interface TokenResponse {
   accessToken: string;

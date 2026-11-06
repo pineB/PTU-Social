@@ -146,8 +146,8 @@ public class TeacherInviteService {
 		for (TeacherInviteAssignment assignment : assignments) {
 			UUID disciplineId = assignment.getId().getDisciplineId();
 			UUID groupId = assignment.getId().getGroupId();
-			if (!teacherAssignments.existsByTeacherIdAndGroupIdAndSemesterId(teacher.getId(), groupId,
-					semester.getId())) {
+			if (!teacherAssignments.existsByTeacherIdAndGroupIdAndDisciplineIdAndSemesterId(teacher.getId(), groupId,
+					disciplineId, semester.getId())) {
 				teacherAssignments.save(new TeacherAssignment(teacher.getId(), disciplineId, groupId,
 						semester.getId()));
 			}

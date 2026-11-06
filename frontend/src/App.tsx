@@ -35,12 +35,15 @@ import {
 import type { HttpErrorNotice } from './types/events';
 import { useAuth } from './auth/AuthProvider';
 import type { UserRole } from './api/auth';
+import AdminManagementPage from './pages/AdminManagementPage';
+import AcademicManagementPage from './pages/AcademicManagementPage';
 
 const roleHomePaths: Record<UserRole, string> = {
   STUDENT: '/student',
   TEACHER: '/teacher',
   ORGANIZER: '/organizer',
   ACADEMIC_OFFICE: '/academic-office',
+  ADMIN: '/admin',
 };
 
 function RequireAuthentication() {
@@ -107,8 +110,12 @@ export default function App() {
               </Route>
               <Route element={<RequireRole role="ACADEMIC_OFFICE" />}>
                 <Route path="academic-office" element={<AcademicOfficeDashboard />} />
+                <Route path="academic-office/management" element={<AcademicManagementPage />} />
                 <Route path="academic-office/certificates" element={<CertificateManagementPage />} />
                 <Route path="academic-office/schedule" element={<ScheduleManagementPage />} />
+              </Route>
+              <Route element={<RequireRole role="ADMIN" />}>
+                <Route path="admin" element={<AdminManagementPage />} />
               </Route>
               <Route path="*" element={<HomeRedirect />} />
             </Route>

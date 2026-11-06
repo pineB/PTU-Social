@@ -29,7 +29,7 @@ function isAuthSession(value: unknown): value is AuthSession {
     && session.tokenType === 'Bearer'
     && typeof session.expiresInSeconds === 'number'
     && typeof session.userId === 'string'
-    && ['STUDENT', 'TEACHER', 'ORGANIZER', 'ACADEMIC_OFFICE'].includes(session.role ?? '')
+    && ['STUDENT', 'TEACHER', 'ORGANIZER', 'ACADEMIC_OFFICE', 'ADMIN'].includes(session.role ?? '')
     && typeof session.email === 'string'
     && typeof session.expiresAt === 'number'
     && session.expiresAt > Date.now();

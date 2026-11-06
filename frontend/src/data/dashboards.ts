@@ -1,6 +1,6 @@
 import type { SvgIconComponent } from '@mui/icons-material';
 
-export type RoleId = 'student' | 'teacher' | 'organizer' | 'academic-office';
+export type RoleId = 'student' | 'teacher' | 'organizer' | 'academic-office' | 'admin';
 
 export interface DashboardRow {
   subject: string;
@@ -79,5 +79,17 @@ export const dashboards: Record<RoleId, DashboardData> = {
     tableTitle: 'Заявления на справки',
     subjectHeading: 'Вопрос',
     detailHeading: 'Студент · группа',
+  },
+  admin: {
+    role: 'admin',
+    title: 'Панель администратора',
+    heading: 'Управление доступом',
+    profileName: '',
+    profileCaption: 'Администратор',
+    metrics: [],
+    rows: [],
+    tableTitle: 'Учётные записи учебной части',
+    subjectHeading: 'Сотрудник',
+    detailHeading: 'Email',
   },
 };

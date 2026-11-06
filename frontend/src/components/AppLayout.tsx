@@ -43,6 +43,7 @@ import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import EmojiEventsRoundedIcon from '@mui/icons-material/EmojiEventsRounded';
 import LeaderboardRoundedIcon from '@mui/icons-material/LeaderboardRounded';
 import ExitToAppRoundedIcon from '@mui/icons-material/ExitToAppRounded';
+import AdminPanelSettingsRoundedIcon from '@mui/icons-material/AdminPanelSettingsRounded';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { dashboards, type RoleId } from '../data/dashboards';
 import { useCampusWorkflow } from '../data/campus-workflow';
@@ -57,6 +58,7 @@ const navigation: { id: RoleId; label: string }[] = [
   { id: 'teacher', label: 'Преподаватель' },
   { id: 'organizer', label: 'Организатор' },
   { id: 'academic-office', label: 'Учебная часть' },
+  { id: 'admin', label: 'Администратор' },
 ];
 
 interface HeaderNotification {
@@ -79,7 +81,7 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
         <Typography className="brand-name">ПТУ-Сошиал</Typography>
       </Box>
 
-      <Box className="workspace-switcher">
+      {role !== 'academic-office' && <Box className="workspace-switcher">
         {navigation.filter((item) => item.id === role).map((item) => {
           const active = role === item.id;
           return (
@@ -93,13 +95,13 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
               aria-current={active ? 'page' : undefined}
             >
               <Box className="workspace-icon">
-                {item.id === 'student' ? <SchoolRoundedIcon /> : item.id === 'teacher' ? <MenuBookRoundedIcon /> : item.id === 'organizer' ? <EventAvailableRoundedIcon /> : <AccountBalanceRoundedIcon />}
+                {item.id === 'student' ? <SchoolRoundedIcon /> : item.id === 'teacher' ? <MenuBookRoundedIcon /> : item.id === 'organizer' ? <EventAvailableRoundedIcon /> : item.id === 'admin' ? <AdminPanelSettingsRoundedIcon /> : <AccountBalanceRoundedIcon />}
               </Box>
               <Typography>{item.label}</Typography>
             </Button>
           );
         })}
-      </Box>
+      </Box>}
 
       <List disablePadding className="sidebar-page-links">
         <ListItemButton component={NavLink} to={`/${role}`} onClick={onNavigate} className={`role-link${isActive(`/${role}`) ? ' role-link-active' : ''}`} aria-current={isActive(`/${role}`) ? 'page' : undefined}>
@@ -173,6 +175,10 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
         )}
         {role === 'academic-office' && (
           <>
+            <ListItemButton component={NavLink} to="/academic-office/management" onClick={onNavigate} className={`role-link${isActive('/academic-office/management') ? ' role-link-active' : ''}`} aria-label="Группы и преподаватели" aria-current={isActive('/academic-office/management') ? 'page' : undefined}>
+              <ListItemIcon className="role-icon"><GroupsRoundedIcon /></ListItemIcon>
+              <ListItemText primary="Группы и преподаватели" />
+            </ListItemButton>
             <ListItemButton component={NavLink} to="/academic-office/certificates" onClick={onNavigate} className={`role-link${isActive('/academic-office/certificates') ? ' role-link-active' : ''}`} aria-label="Обработка заявок на справки" aria-current={isActive('/academic-office/certificates') ? 'page' : undefined}>
               <ListItemIcon className="role-icon"><FactCheckRoundedIcon /></ListItemIcon>
               <ListItemText primary="Заявки на справки" primaryTypographyProps={{ fontWeight: location.pathname === '/academic-office/certificates' ? 700 : 600, fontSize: 14 }} />
@@ -182,6 +188,12 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
               <ListItemText primary="Расписание" primaryTypographyProps={{ fontWeight: location.pathname === '/academic-office/schedule' ? 700 : 600, fontSize: 14 }} />
             </ListItemButton>
           </>
+        )}
+        {role === 'admin' && (
+          <ListItemButton component={NavLink} to="/admin" onClick={onNavigate} className={`role-link${isActive('/admin') ? ' role-link-active' : ''}`} aria-label="Управление учебной частью" aria-current={isActive('/admin') ? 'page' : undefined}>
+            <ListItemIcon className="role-icon"><AdminPanelSettingsRoundedIcon /></ListItemIcon>
+            <ListItemText primary="Учётные записи" />
+          </ListItemButton>
         )}
         {role === 'student' && (
           <>
@@ -207,7 +219,7 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
             </ListItemButton>
           </>
         )}
-        {[
+        {role === 'student' && [
           { path: '/student/awards', label: 'Лента наград', icon: <EmojiEventsRoundedIcon /> },
           { path: '/student/leaderboard', label: 'Таблица лидеров', icon: <LeaderboardRoundedIcon /> },
         ].map((item) => (
@@ -241,9 +253,11 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
       ? 'organizer'
       : session?.role === 'ACADEMIC_OFFICE'
         ? 'academic-office'
-        : 'student';
+        : session?.role === 'ADMIN'
+          ? 'admin'
+          : 'student';
   const profile = dashboards[role];
-  const profileName = currentUser?.fullName ?? '';
+  const profileName = currentUser?.fullName || session?.email || '';
   const roleCaption = currentUser?.groupName
     ? `${currentUser.groupName} · студент`
     : role === 'teacher'
@@ -252,7 +266,9 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
         ? 'Организатор мероприятий'
         : role === 'academic-office'
           ? 'Учебная часть'
-          : '';
+          : role === 'admin'
+            ? 'Администратор'
+            : 'Студент';
   const pageTitles: Record<string, string> = {
     '/student/profile': 'Профиль',
     '/student/awards': 'Лента наград',
@@ -264,6 +280,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
     '/student/battle-pass': 'ПТУ-пасс',
     '/student/inventory': 'Инвентарь',
     '/student/certificates': 'Справки',
+    '/academic-office/management': 'Группы и преподаватели',
     '/teacher/submissions': 'Сдачи студентов',
     '/teacher/students': 'Мои студенты',
     '/teacher/events': 'Мероприятия и баллы',
@@ -443,6 +460,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
                 <Avatar className="topbar-avatar">{profileInitials}</Avatar>
                 <Box className="topbar-user-copy">
                   <Typography variant="body2" fontWeight={700} noWrap>{profileName}</Typography>
+                  <Typography variant="caption" color="text.secondary" noWrap>{roleCaption || profile.title}</Typography>
                 </Box>
               </Box>
             )}

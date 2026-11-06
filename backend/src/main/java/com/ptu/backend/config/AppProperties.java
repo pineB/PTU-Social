@@ -15,6 +15,7 @@ public record AppProperties(
 		Invite invite,
 		Verification verification,
 		Jwt jwt,
+		AdminBootstrap adminBootstrap,
 		Seed seed,
 		RateLimit rateLimit,
 		Reviews reviews) {
@@ -37,6 +38,9 @@ public record AppProperties(
 	}
 
 	public record Jwt(String secret, Duration ttl) {
+	}
+
+	public record AdminBootstrap(String email, String password, String fullName) {
 	}
 
 	public record Seed(String officeEmail, String officePassword) {

@@ -2,6 +2,7 @@ package com.ptu.backend.academic.repo;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -32,4 +33,7 @@ public interface TeacherAssignmentRepository extends JpaRepository<TeacherAssign
 	List<TeacherAssignment> findAllByTeacherIdAndSemesterId(UUID teacherId, UUID semesterId);
 
 	List<TeacherAssignment> findAllByTeacherIdInAndSemesterId(Collection<UUID> teacherIds, UUID semesterId);
+
+	Optional<TeacherAssignment> findByTeacherIdAndGroupIdAndDisciplineIdAndSemesterId(UUID teacherId, UUID groupId,
+			UUID disciplineId, UUID semesterId);
 }
