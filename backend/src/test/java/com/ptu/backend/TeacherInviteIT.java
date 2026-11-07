@@ -169,7 +169,9 @@ class TeacherInviteIT extends AbstractIntegrationTest {
 	private String capturedInviteToken(String email) {
 		ArgumentCaptor<String> link = ArgumentCaptor.forClass(String.class);
 		verify(mailService).sendTeacherInvite(eq(email), any(), link.capture(), any(Duration.class));
-		String query = URI.create(link.getValue()).getQuery();
+		URI inviteUri = URI.create(link.getValue());
+		assertThat(inviteUri.getPath()).isEqualTo("/teacher/activate");
+		String query = inviteUri.getQuery();
 		assertThat(query).startsWith("token=");
 		return URLDecoder.decode(query.substring("token=".length()), StandardCharsets.UTF_8);
 	}
