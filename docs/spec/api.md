@@ -84,7 +84,21 @@ Retry-After: 37
 | POST | `/api/auth/registration-requests/{requestId}/email-verify` | 200 `RegistrationRequestView` | проверка кода (5 попыток) |
 | POST | `/api/auth/login` | 200 `TokenResponse` | вход, JWT 24h |
 | GET | `/api/auth/teacher-invites/{token}` | 200 `TeacherInviteInfoResponse` | данные инвайта преподавателя |
-| POST | `/api/auth/teacher-invites/{token}/accept` | 201 `TokenResponse` | активация аккаунта преподавателя |
+| POST | `/api/auth/teacher-invites/{token}/accept` | 201 `TokenResponse` | активация аккаунта преподавателя (задаёт свой пароль) |
+| POST | `/api/auth/password/forgot` | 202 | запрос кода сброса пароля; ответ всегда `202` (аккаунт не раскрывается) |
+| POST | `/api/auth/password/reset` | 204 | сброс пароля по коду `{email, code, newPassword}` |
+
+Письмо-приглашение ведёт на `{APP_BASE_URL}/teacher/activate?token=…` (страница `TeacherActivationPage`), где преподаватель задаёт пароль.
+
+Сброс пароля: код 6 цифр, TTL 10 мин, 5 попыток, 3 отправки/15 мин, интервал 60 c (общие лимиты `app.verification.*`), ключи Redis `verification:password-reset:*`. Неизвестный email и неверный код возвращают одинаковый `400` `«Неверный или просроченный код подтверждения»`; перебор попыток — `429`.
+
+### Аутентифицированные (`/api/auth/**`)
+
+| Метод | Путь | Успех | Описание |
+| --- | --- | --- | --- |
+| POST | `/api/auth/password/change` | 204 | `{currentPassword, newPassword}`; неверный текущий / совпадение с новым → `400` |
+
+Пароль: 8–72 символа, минимум одна буква и одна цифра (как при регистрации/инвайте).
 
 ### Учебная часть
 

@@ -113,7 +113,7 @@ public class TeacherInviteService {
 		}
 		inviteAssignments.saveAll(ids.stream().map(TeacherInviteAssignment::new).toList());
 
-		String link = "%s/accept-invite?token=%s".formatted(
+		String link = "%s/teacher/activate?token=%s".formatted(
 				properties.baseUrl(),
 				URLEncoder.encode(token, StandardCharsets.UTF_8));
 		mailService.sendTeacherInvite(email, invite.getFullName(), link, properties.invite().ttl());

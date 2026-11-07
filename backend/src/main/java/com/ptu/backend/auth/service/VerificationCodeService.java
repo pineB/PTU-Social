@@ -1,7 +1,6 @@
 package com.ptu.backend.auth.service;
 
 import java.security.SecureRandom;
-import java.util.UUID;
 
 import com.ptu.backend.common.exception.ApiException;
 import com.ptu.backend.common.util.Hashing;
@@ -13,23 +12,24 @@ import org.springframework.stereotype.Service;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Stores hashed email verification codes in Redis together with send/attempt counters.
+ * Stores hashed one-time codes in Redis together with send/attempt counters.
+ * Codes are namespaced by scope (registration, password-reset) and subject id.
  * All operations are fail-closed: if Redis is unavailable verification is not performed.
  */
 @Slf4j
 @Service
-public class EmailVerificationService {
+public class VerificationCodeService {
 
-	private static final String CODE_KEY = "email_verification:";
-	private static final String SENDS_KEY = "email_verification:sends:";
-	private static final String ATTEMPTS_KEY = "email_verification:attempts:";
-	private static final String RESEND_KEY = "email_verification:resend:";
+	public static final String SCOPE_REGISTRATION = "registration";
+	public static final String SCOPE_PASSWORD_RESET = "password-reset";
+
+	private static final String KEY_PREFIX = "verification:";
 
 	private final StringRedisTemplate redis;
 	private final AppProperties properties;
 	private final SecureRandom random = new SecureRandom();
 
-	public EmailVerificationService(StringRedisTemplate redis, AppProperties properties) {
+	public VerificationCodeService(StringRedisTemplate redis, AppProperties properties) {
 		this.redis = redis;
 		this.properties = properties;
 	}
@@ -37,16 +37,17 @@ public class EmailVerificationService {
 	/**
 	 * Issues a new code, invalidating the previous one. Returns the plain code to be sent by email.
 	 */
-	public String issueCode(UUID requestId) {
+	public String issueCode(String scope, String subject) {
 		AppProperties.Verification limits = properties.verification();
-		String sendsKey = SENDS_KEY + requestId;
+		String sendsKey = key(scope, "sends", subject);
 
 		int sends = parseInt(redis.opsForValue().get(sendsKey));
 		if (sends >= limits.maxSends()) {
 			throw ApiException.tooManyRequests("Слишком много отправок кода, попробуйте позже");
 		}
 
-		Boolean acquired = redis.opsForValue().setIfAbsent(RESEND_KEY + requestId, "1", limits.resendInterval());
+		Boolean acquired = redis.opsForValue().setIfAbsent(key(scope, "resend", subject), "1",
+				limits.resendInterval());
 		if (!Boolean.TRUE.equals(acquired)) {
 			throw ApiException.tooManyRequests(
 					"Повторная отправка кода возможна не раньше чем через %d секунд"
@@ -60,27 +61,28 @@ public class EmailVerificationService {
 
 		String code = String.format("%06d", random.nextInt(1_000_000));
 		String salt = Hashing.randomSalt();
-		redis.opsForValue().set(CODE_KEY + requestId, salt + ":" + Hashing.sha256Hex(salt + code),
+		redis.opsForValue().set(key(scope, "code", subject),
+				salt + ":" + Hashing.sha256Hex(salt + code),
 				limits.codeTtl());
-		redis.delete(ATTEMPTS_KEY + requestId);
+		redis.delete(key(scope, "attempts", subject));
 		return code;
 	}
 
-	public void verifyCode(UUID requestId, String code) {
+	public void verifyCode(String scope, String subject, String code) {
 		AppProperties.Verification limits = properties.verification();
-		String codeKey = CODE_KEY + requestId;
+		String codeKey = key(scope, "code", subject);
 		String stored = redis.opsForValue().get(codeKey);
 		if (stored == null) {
 			throw ApiException.badRequest("Код истёк или не был отправлен");
 		}
 
-		String attemptsKey = ATTEMPTS_KEY + requestId;
+		String attemptsKey = key(scope, "attempts", subject);
 		Long attempts = redis.opsForValue().increment(attemptsKey);
 		if (attempts != null && attempts == 1L) {
 			redis.expire(attemptsKey, limits.codeTtl());
 		}
 		if (attempts != null && attempts > limits.maxAttempts()) {
-			invalidate(requestId);
+			invalidate(scope, subject);
 			throw ApiException.tooManyRequests("Превышено число попыток проверки кода, запросите новый код");
 		}
 
@@ -91,12 +93,16 @@ public class EmailVerificationService {
 			throw ApiException.badRequest("Неверный код подтверждения");
 		}
 
-		invalidate(requestId);
+		invalidate(scope, subject);
 	}
 
-	public void invalidate(UUID requestId) {
-		redis.delete(CODE_KEY + requestId);
-		redis.delete(ATTEMPTS_KEY + requestId);
+	public void invalidate(String scope, String subject) {
+		redis.delete(key(scope, "code", subject));
+		redis.delete(key(scope, "attempts", subject));
+	}
+
+	private static String key(String scope, String kind, String subject) {
+		return KEY_PREFIX + scope + ":" + kind + ":" + subject;
 	}
 
 	private static int parseInt(String value) {

@@ -47,6 +47,18 @@ public class SmtpMailService implements MailService {
 		send(email, "Приглашение преподавателя — ПТУ-Сошиал", text);
 	}
 
+	@Override
+	public void sendPasswordResetCode(String email, String fullName, String code, Duration ttl) {
+		String text = """
+				Здравствуйте, %s!
+
+				Код для сброса пароля: %s
+				Код действует %d минут и может быть использован только один раз.
+				Если вы не запрашивали сброс пароля, просто проигнорируйте письмо.
+				""".formatted(fullName, code, ttl.toMinutes());
+		send(email, "Сброс пароля — ПТУ-Сошиал", text);
+	}
+
 	private void send(String email, String subject, String text) {
 		SimpleMailMessage message = new SimpleMailMessage();
 		message.setFrom(from);

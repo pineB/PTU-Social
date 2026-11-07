@@ -37,13 +37,13 @@ public class RegistrationService {
 	private final StudyGroupRepository groups;
 	private final UserRepository users;
 	private final PasswordEncoder passwordEncoder;
-	private final EmailVerificationService emailVerification;
+	private final VerificationCodeService emailVerification;
 	private final MailService mailService;
 	private final AppProperties properties;
 
 	public RegistrationService(RegistrationRequestRepository requests, FacultyRepository faculties,
 			StudyGroupRepository groups, UserRepository users, PasswordEncoder passwordEncoder,
-			EmailVerificationService emailVerification, MailService mailService, AppProperties properties) {
+			VerificationCodeService emailVerification, MailService mailService, AppProperties properties) {
 		this.requests = requests;
 		this.faculties = faculties;
 		this.groups = groups;
@@ -107,14 +107,14 @@ public class RegistrationService {
 			throw ApiException.conflict("Заявка уже подтверждена или обработана");
 		}
 		ensureNotExpired(request);
-		emailVerification.verifyCode(requestId, code);
+		emailVerification.verifyCode(VerificationCodeService.SCOPE_REGISTRATION, requestId.toString(), code);
 		request.setStatus(RegistrationStatus.EMAIL_VERIFIED);
 		request.setEmailVerifiedAt(Instant.now());
 		return RegistrationRequestView.from(request);
 	}
 
 	private void sendCode(RegistrationRequest request) {
-		String code = emailVerification.issueCode(request.getId());
+		String code = emailVerification.issueCode(VerificationCodeService.SCOPE_REGISTRATION, request.getId().toString());
 		mailService.sendVerificationCode(request.getEmail(), request.getFullName(), code,
 				properties.verification().codeTtl());
 	}

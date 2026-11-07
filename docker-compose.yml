@@ -53,7 +53,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-redis}
       MAIL_HOST: mailpit
       MAIL_PORT: 1025
-      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost}
       REGISTRATION_TTL: ${REGISTRATION_TTL:-7d}
       INVITE_TTL: ${INVITE_TTL:-7d}
       SEED_OFFICE_EMAIL: ${SEED_OFFICE_EMAIL:-office@ptu.local}

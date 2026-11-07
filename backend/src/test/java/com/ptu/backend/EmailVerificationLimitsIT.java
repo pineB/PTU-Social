@@ -45,15 +45,15 @@ class EmailVerificationLimitsIT extends AbstractIntegrationTest {
 		mockMvc.perform(post("/api/auth/registration-requests/{id}/email-code", requestId))
 				.andExpect(status().isTooManyRequests());
 
-		redis.delete("email_verification:resend:" + requestId);
+		redis.delete("verification:registration:resend:" + requestId);
 		mockMvc.perform(post("/api/auth/registration-requests/{id}/email-code", requestId))
 				.andExpect(status().isAccepted());
 
-		redis.delete("email_verification:resend:" + requestId);
+		redis.delete("verification:registration:resend:" + requestId);
 		mockMvc.perform(post("/api/auth/registration-requests/{id}/email-code", requestId))
 				.andExpect(status().isAccepted());
 
-		redis.delete("email_verification:resend:" + requestId);
+		redis.delete("verification:registration:resend:" + requestId);
 		mockMvc.perform(post("/api/auth/registration-requests/{id}/email-code", requestId))
 				.andExpect(status().isTooManyRequests());
 	}

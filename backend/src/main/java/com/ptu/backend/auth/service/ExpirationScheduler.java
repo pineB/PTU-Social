@@ -18,9 +18,9 @@ import lombok.extern.slf4j.Slf4j;
 public class ExpirationScheduler {
 
 	private final RegistrationRequestRepository requests;
-	private final EmailVerificationService emailVerification;
+	private final VerificationCodeService emailVerification;
 
-	public ExpirationScheduler(RegistrationRequestRepository requests, EmailVerificationService emailVerification) {
+	public ExpirationScheduler(RegistrationRequestRepository requests, VerificationCodeService emailVerification) {
 		this.requests = requests;
 		this.emailVerification = emailVerification;
 	}
@@ -35,7 +35,7 @@ public class ExpirationScheduler {
 		for (RegistrationRequest request : expiredRequests) {
 			request.setStatus(RegistrationStatus.EXPIRED);
 			request.setPasswordHash(null);
-			emailVerification.invalidate(request.getId());
+			emailVerification.invalidate(VerificationCodeService.SCOPE_REGISTRATION, request.getId().toString());
 		}
 		if (!expiredRequests.isEmpty()) {
 			log.info("Expired {} registration requests", expiredRequests.size());

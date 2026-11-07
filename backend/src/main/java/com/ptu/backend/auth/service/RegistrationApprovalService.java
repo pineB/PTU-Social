@@ -34,11 +34,11 @@ public class RegistrationApprovalService {
 	private final StudentProfileRepository profiles;
 	private final TeacherAssignmentRepository assignments;
 	private final SemesterRepository semesters;
-	private final EmailVerificationService emailVerification;
+	private final VerificationCodeService emailVerification;
 
 	public RegistrationApprovalService(RegistrationRequestRepository requests, UserRepository users,
 			StudentProfileRepository profiles, TeacherAssignmentRepository assignments,
-			SemesterRepository semesters, EmailVerificationService emailVerification) {
+			SemesterRepository semesters, VerificationCodeService emailVerification) {
 		this.requests = requests;
 		this.users = users;
 		this.profiles = profiles;
@@ -109,7 +109,7 @@ public class RegistrationApprovalService {
 		}
 		request.setStatus(RegistrationStatus.REJECTED);
 		request.setPasswordHash(null);
-		emailVerification.invalidate(requestId);
+		emailVerification.invalidate(VerificationCodeService.SCOPE_REGISTRATION, requestId.toString());
 		return RegistrationRequestView.from(request);
 	}
 
