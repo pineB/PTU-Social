@@ -148,7 +148,7 @@ export function LoginPage() {
         <form onSubmit={handleSubmit}>
           <Stack spacing={2}>
             {Boolean((location.state as { registrationSubmitted?: boolean } | null)?.registrationSubmitted) && (
-              <Alert severity="success">Почта подтверждена. Заявка отправлена на рассмотрение учебной части.</Alert>
+              <Alert severity="success">Почта подтверждена. Заявка отправлена преподавателю группы и старосте.</Alert>
             )}
             <TextField
               label="Электронная почта"

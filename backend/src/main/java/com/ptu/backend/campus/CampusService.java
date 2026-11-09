@@ -4,6 +4,7 @@ import com.ptu.backend.campus.CampusDtos.*;
 import com.ptu.backend.common.exception.ApiException;
 import com.ptu.backend.common.security.UserPrincipal;
 import com.ptu.backend.api.dto.ReviewCreateRequest;
+import com.ptu.backend.auth.service.RegistrationApprovalService;
 import com.ptu.backend.review.ReviewService;
 import com.ptu.backend.user.domain.Role;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -29,11 +30,14 @@ public class CampusService {
     private static final String COMMON_RARITY = "Обычный";
     private final JdbcTemplate jdbc;
     private final ReviewService reviewService;
+    private final RegistrationApprovalService registrationApproval;
     private final SecureRandom secureRandom = new SecureRandom();
 
-    public CampusService(JdbcTemplate jdbc, ReviewService reviewService) {
+    public CampusService(JdbcTemplate jdbc, ReviewService reviewService,
+                         RegistrationApprovalService registrationApproval) {
         this.jdbc = jdbc;
         this.reviewService = reviewService;
+        this.registrationApproval = registrationApproval;
     }
 
     @Transactional(readOnly = true)
@@ -303,7 +307,10 @@ public class CampusService {
     @Transactional(readOnly = true)
     public List<GroupConfirmationView> confirmations(UserPrincipal principal, UUID groupId) {
         requireGroupManager(principal, groupId, true);
-        return confirmationsForGroup(groupId);
+        List<GroupConfirmationView> views = new java.util.ArrayList<>(confirmationsForGroup(groupId));
+        views.addAll(registrationConfirmations(groupId));
+        views.sort((left, right) -> right.submittedAt().compareTo(left.submittedAt()));
+        return views;
     }
 
     @Transactional
@@ -350,7 +357,11 @@ public class CampusService {
                 where id = ? and status = 'PENDING' for update
                 """, (rs, row) -> new ConfirmationRow(rs.getObject(1, UUID.class),
                 rs.getObject(2, UUID.class)), confirmationId).stream().findFirst()
-                .orElseThrow(() -> ApiException.notFound("Заявка не найдена"));
+                .orElse(null);
+        if (confirmation == null) {
+            decideRegistrationRequest(principal, confirmationId, decision.approve());
+            return;
+        }
         requireGroupManager(principal, confirmation.groupId, true);
         if (decision.approve()) {
             jdbc.update("""
@@ -816,6 +827,30 @@ public class CampusService {
             throw ApiException.forbidden("Управлять группой могут только назначенный староста или сотрудники");
         }
         requireGroupAccess(principal, groupId);
+    }
+
+    private void decideRegistrationRequest(UserPrincipal principal, UUID requestId, boolean approve) {
+        boolean exists = !jdbc.query("select 1 from registration_requests where id = ?",
+                (rs, row) -> rs.getInt(1), requestId).isEmpty();
+        if (!exists) {
+            throw ApiException.notFound("Заявка не найдена");
+        }
+        if (approve) {
+            registrationApproval.approve(requestId, principal);
+        } else {
+            registrationApproval.reject(requestId, principal);
+        }
+    }
+
+    private List<GroupConfirmationView> registrationConfirmations(UUID groupId) {
+        return jdbc.query("""
+                select r.id, r.full_name, r.email::text, g.name,
+                       coalesce(r.email_verified_at, r.created_at) as submitted_at,
+                       case r.status when 'EMAIL_VERIFIED' then 'PENDING' else r.status end as status
+                from registration_requests r join study_groups g on g.id = r.group_id
+                where r.group_id = ? and r.status in ('EMAIL_VERIFIED', 'APPROVED', 'REJECTED')
+                order by submitted_at desc
+                """, confirmationMapper(), groupId);
     }
 
     private List<GroupConfirmationView> confirmationsForGroup(UUID groupId) {

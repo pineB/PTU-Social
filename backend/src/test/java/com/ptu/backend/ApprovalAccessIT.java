@@ -2,6 +2,7 @@ package com.ptu.backend;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -159,6 +160,38 @@ class ApprovalAccessIT extends AbstractIntegrationTest {
 						.header("Authorization", bearer(office)))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.status").value("APPROVED"));
+	}
+
+	@Test
+	void campusConfirmationListIncludesRegistrationRequests() throws Exception {
+		User teacher = createUser(uniqueEmail("teacher"), "teacher12345", Role.TEACHER);
+		assignTeacher(teacher, groupA);
+		UUID requestId = verifiedRequest(groupA);
+
+		mockMvc.perform(get("/api/campus/group-confirmations")
+						.param("groupId", groupA.getId().toString())
+						.header("Authorization", bearer(teacher)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].id").value(requestId.toString()))
+				.andExpect(jsonPath("$[0].status").value("pending"))
+				.andExpect(jsonPath("$[0].group").value(groupA.getName()));
+	}
+
+	@Test
+	void campusDecisionApprovesRegistrationRequest() throws Exception {
+		User teacher = createUser(uniqueEmail("teacher"), "teacher12345", Role.TEACHER);
+		assignTeacher(teacher, groupA);
+		UUID requestId = verifiedRequest(groupA);
+
+		mockMvc.perform(patch("/api/campus/group-confirmations/{id}", requestId)
+						.contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+						.content("{\"approve\":true}")
+						.header("Authorization", bearer(teacher)))
+				.andExpect(status().isOk());
+
+		assertThat(registrationRequests.findById(requestId).orElseThrow().getStatus())
+				.isEqualTo(RegistrationStatus.APPROVED);
 	}
 
 	@Test

@@ -111,6 +111,8 @@ Retry-After: 37
 | POST | `/api/academic/registration-requests/{requestId}/approve` | то же | одобрить заявку в группу |
 | POST | `/api/academic/registration-requests/{requestId}/reject` | то же | отклонить заявку |
 
+`GET /api/campus/group-confirmations?groupId=…` (используется экраном «Мои студенты») дополнительно отдаёт заявки на регистрацию этой группы (`EMAIL_VERIFIED` → `pending`, `APPROVED`/`REJECTED` → `approved`/`rejected`) с `id` = id заявки; `PATCH /api/campus/group-confirmations/{id}` с `{approve}` для такого id выполняет approve/reject заявки (тот же разбор прав).
+
 ### Справки (`/api/certificates`)
 
 Типы: `EDUCATION`, `INCOME`, `MILITARY`. Статусы: `PENDING`, `APPROVED`, `REJECTED`.
