@@ -19,6 +19,8 @@ public interface StudentProfileRepository extends JpaRepository<StudentProfile, 
 
 	List<StudentProfile> findAllByGroupId(UUID groupId);
 
+	List<StudentProfile> findAllByGroupIdAndGroupLeaderTrue(UUID groupId);
+
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select profile from StudentProfile profile where profile.userId = :userId")
 	Optional<StudentProfile> findByUserIdForUpdate(@Param("userId") UUID userId);

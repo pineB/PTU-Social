@@ -30,6 +30,14 @@ public interface TeacherAssignmentRepository extends JpaRepository<TeacherAssign
 			@Param("semesterId") UUID semesterId,
 			@Param("status") AssignmentStatus status);
 
+	@Query("""
+			select distinct a.teacherId from TeacherAssignment a
+			where a.groupId = :groupId and a.semesterId = :semesterId and a.status = :status
+			""")
+	List<UUID> findTeacherIdsByGroup(@Param("groupId") UUID groupId,
+			@Param("semesterId") UUID semesterId,
+			@Param("status") AssignmentStatus status);
+
 	List<TeacherAssignment> findAllByTeacherIdAndSemesterId(UUID teacherId, UUID semesterId);
 
 	List<TeacherAssignment> findAllByTeacherIdInAndSemesterId(Collection<UUID> teacherIds, UUID semesterId);

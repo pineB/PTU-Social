@@ -59,6 +59,18 @@ public class SmtpMailService implements MailService {
 		send(email, "Сброс пароля — ПТУ-Сошиал", text);
 	}
 
+	@Override
+	public void sendRegistrationPendingNotice(String email, String fullName, String applicantName, String groupName,
+			String reviewLink) {
+		String text = """
+				Здравствуйте, %s!
+
+				Поступила заявка на регистрацию: %s, группа %s.
+				Рассмотреть заявку можно в личном кабинете: %s
+				""".formatted(fullName, applicantName, groupName, reviewLink);
+		send(email, "Заявка на регистрацию — ПТУ-Сошиал", text);
+	}
+
 	private void send(String email, String subject, String text) {
 		SimpleMailMessage message = new SimpleMailMessage();
 		message.setFrom(from);

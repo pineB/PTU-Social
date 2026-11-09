@@ -9,4 +9,7 @@ public interface MailService {
 	void sendTeacherInvite(String email, String fullName, String inviteLink, Duration ttl);
 
 	void sendPasswordResetCode(String email, String fullName, String code, Duration ttl);
+
+	void sendRegistrationPendingNotice(String email, String fullName, String applicantName, String groupName,
+			String reviewLink);
 }

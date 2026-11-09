@@ -39,11 +39,13 @@ public class RegistrationService {
 	private final PasswordEncoder passwordEncoder;
 	private final VerificationCodeService emailVerification;
 	private final MailService mailService;
+	private final RegistrationRequestNotifier notifier;
 	private final AppProperties properties;
 
 	public RegistrationService(RegistrationRequestRepository requests, FacultyRepository faculties,
 			StudyGroupRepository groups, UserRepository users, PasswordEncoder passwordEncoder,
-			VerificationCodeService emailVerification, MailService mailService, AppProperties properties) {
+			VerificationCodeService emailVerification, MailService mailService,
+			RegistrationRequestNotifier notifier, AppProperties properties) {
 		this.requests = requests;
 		this.faculties = faculties;
 		this.groups = groups;
@@ -51,6 +53,7 @@ public class RegistrationService {
 		this.passwordEncoder = passwordEncoder;
 		this.emailVerification = emailVerification;
 		this.mailService = mailService;
+		this.notifier = notifier;
 		this.properties = properties;
 	}
 
@@ -110,6 +113,7 @@ public class RegistrationService {
 		emailVerification.verifyCode(VerificationCodeService.SCOPE_REGISTRATION, requestId.toString(), code);
 		request.setStatus(RegistrationStatus.EMAIL_VERIFIED);
 		request.setEmailVerifiedAt(Instant.now());
+		notifier.notifyReviewers(request);
 		return RegistrationRequestView.from(request);
 	}
 
