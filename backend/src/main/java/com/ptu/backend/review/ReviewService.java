@@ -10,6 +10,7 @@ import com.ptu.backend.review.filter.BlockedWordsReviewFilterStrategy;
 import com.ptu.backend.review.filter.LengthReviewFilterStrategy;
 import com.ptu.backend.review.filter.SpamReviewFilterStrategy;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -22,17 +23,39 @@ import java.util.List;
 @Service
 public class ReviewService {
 
+    private static final List<String> DEFAULT_BLOCKED_WORDS = List.of(
+            "хуй", "хуя", "хуе", "хуи",
+            "пизд",
+            "бляд", "блят",
+            "ебал", "ебан", "ебат", "ебуч", "заеб", "наеб", "уеб", "выеб", "доеб",
+            "сука", "суки", "суке", "суку", "сукой", "сукин", "сучк",
+            "мудак", "мудил", "мудач", "долбоеб",
+            "залуп", "гандон", "гондон", "пидор", "пидар", "пидер", "шлюх",
+            "мразь", "ублюд", "говн",
+            "fuck", "shit", "bitch", "asshole", "cunt",
+            "viagra", "buy now", "promo", "click here"
+    );
+
     private final ReviewRepository reviewRepository;
     private final ObjectProvider<ReviewCurrencyAwarder> currencyAwarderProvider;
     private final ReviewModerationService moderationService;
+    private final BlockedWordsReviewFilterStrategy blockedWords;
 
+    @Autowired
     public ReviewService(ReviewRepository reviewRepository,
                          ObjectProvider<ReviewCurrencyAwarder> currencyAwarderProvider) {
+        this(reviewRepository, currencyAwarderProvider,
+                new BlockedWordsReviewFilterStrategy(DEFAULT_BLOCKED_WORDS));
+    }
+
+    ReviewService(ReviewRepository reviewRepository,
+                  ObjectProvider<ReviewCurrencyAwarder> currencyAwarderProvider,
+                  BlockedWordsReviewFilterStrategy blockedWords) {
         this.reviewRepository = reviewRepository;
         this.currencyAwarderProvider = currencyAwarderProvider;
+        this.blockedWords = blockedWords;
         this.moderationService = new ReviewModerationService(List.of(
                 new LengthReviewFilterStrategy(20, 1000),
-                new BlockedWordsReviewFilterStrategy(List.of("viagra", "buy now", "promo", "click here")),
                 new SpamReviewFilterStrategy()
         ));
     }
@@ -54,6 +77,10 @@ public class ReviewService {
         review.setStatus(ReviewStatus.PENDING_MODERATION);
         review.setRewardAwarded(false);
         return toResponse(reviewRepository.save(review));
+    }
+
+    public List<String> flaggedWords(String reviewText) {
+        return blockedWords.matchingWords(reviewText);
     }
 
     @Transactional

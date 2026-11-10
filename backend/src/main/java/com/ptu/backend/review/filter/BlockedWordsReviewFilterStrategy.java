@@ -14,12 +14,21 @@ public class BlockedWordsReviewFilterStrategy implements ReviewFilterStrategy {
 
     @Override
     public boolean isValid(String reviewText) {
+        return matchingWords(reviewText).isEmpty();
+    }
+
+    public List<String> matchingWords(String reviewText) {
         if (reviewText == null || reviewText.isBlank()) {
-            return false;
+            return List.of();
         }
-        String normalized = reviewText.toLowerCase(Locale.ROOT);
+        String normalized = normalize(reviewText);
         return blockedWords.stream()
-            .map(word -> word.toLowerCase(Locale.ROOT))
-                .noneMatch(normalized::contains);
+            .filter(word -> normalized.contains(normalize(word)))
+            .distinct()
+            .toList();
+    }
+
+    private String normalize(String value) {
+        return value.toLowerCase(Locale.ROOT).replace('ё', 'е');
     }
 }

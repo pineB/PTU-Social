@@ -33,6 +33,14 @@ class ReviewModerationWorkflowTest {
     }
 
     @Test
+    void blockedWordsAreReportedForManualModeration() {
+        ReviewService service = new ReviewService(mock(ReviewRepository.class), mock(ObjectProvider.class));
+
+        assertEquals(List.of("хуй"), service.flaggedWords("Ну хуй знает, как прошло"));
+        assertTrue(service.flaggedWords("Отличное мероприятие, всё понравилось").isEmpty());
+    }
+
+    @Test
     void approvingTheSameReviewTwiceAwardsCurrencyOnlyOnce() {
         ReviewRepository repository = mock(ReviewRepository.class);
         ObjectProvider<ReviewCurrencyAwarder> awarderProvider = mock(ObjectProvider.class);

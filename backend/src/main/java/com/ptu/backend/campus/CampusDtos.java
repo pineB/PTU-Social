@@ -70,6 +70,11 @@ public final class CampusDtos {
             String id, String eventTitle, String studentName, int rating, String comment, String createdAt) {
     }
 
+    public record EventModerationReviewView(
+            String id, String eventId, String eventTitle, String studentName, String group,
+            int rating, String comment, String createdAt, List<String> flaggedWords) {
+    }
+
     public record GroupView(String id, String name, int size, String leaderId) {
     }
 

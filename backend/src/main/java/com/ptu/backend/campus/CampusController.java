@@ -59,6 +59,11 @@ public class CampusController {
         return campus.organizerReviews(organizerId);
     }
 
+    @GetMapping("/campus/reviews/moderation")
+    public List<EventModerationReviewView> moderationQueue(@AuthenticationPrincipal UserPrincipal principal) {
+        return campus.moderationQueue(principal);
+    }
+
     @PostMapping("/campus/events")
     public EventView createEvent(@AuthenticationPrincipal UserPrincipal principal,
                                  @RequestBody CreateEventRequest request) {

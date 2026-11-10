@@ -115,7 +115,7 @@ Retry-After: 37
 
 ### Справки (`/api/certificates`)
 
-Типы: `EDUCATION`, `INCOME`, `MILITARY`. Статусы: `PENDING`, `APPROVED`, `REJECTED`.
+Типы: `EDUCATION`, `INCOME`, `MILITARY`, `OTHER`. Статусы: `PENDING`, `IN_PROGRESS`, `READY`, `APPROVED`, `ISSUED`, `REJECTED`.
 Доступ к методам закрыт `@PreAuthorize`; при неверной роли — `403` в формате `ApiError`.
 
 | Метод | Путь | Роль | Успех | Описание |
@@ -123,10 +123,10 @@ Retry-After: 37
 | POST | `/api/certificates` | `STUDENT` | 201 `CertificateRequestView` | создать заявку (статус `PENDING`) |
 | GET | `/api/certificates/my` | `STUDENT` | 200 `CertificateRequestView[]` | только свои заявки |
 | GET | `/api/certificates?status=&page=&size=` | `ACADEMIC_OFFICE` | 200 `Page<CertificateRequestView>` | все заявки, фильтр по статусу, сортировка по `createdAt` ASC |
-| PATCH | `/api/certificates/{id}/status` | `ACADEMIC_OFFICE` | 200 `CertificateRequestView` | `APPROVED` / `REJECTED` |
+| PATCH | `/api/certificates/{id}/status` | `ACADEMIC_OFFICE` | 200 `CertificateRequestView` | `IN_PROGRESS` / `READY` / `ISSUED` / `REJECTED`; `APPROVED` → `READY` |
 
-Тело создания: `{"type":"EDUCATION"}`.
-Тело смены статуса: `{"status":"REJECTED","rejectionReason":"причина"}` — для `REJECTED` причина обязательна (иначе `400`), для `APPROVED` игнорируется и сохраняется `null`.
+Тело создания: `{"type":"EDUCATION","deliveryMethod":"PICKUP"}` (`deliveryMethod`: `PICKUP` или `DIGITAL`, обязателен).
+Тело смены статуса: `{"status":"REJECTED","rejectionReason":"причина"}` — для `REJECTED` причина обязательна (иначе `400`), для остальных игнорируется и сохраняется `null`. Переходы: `PENDING→IN_PROGRESS/READY/REJECTED`, `IN_PROGRESS→READY/REJECTED`, `READY→ISSUED/REJECTED`; для `READY` нужен загруженный PDF (`POST /{id}/document`), иначе `400`; недопустимый переход → `409`.
 
 ```json
 {
@@ -142,6 +142,18 @@ Retry-After: 37
 ```
 
 Ошибки: `400` — причина не указана / статус `PENDING` в теле PATCH / невалидный `type` или `status`; `403` — не та роль; `404` — заявка не найдена; `409` — заявка уже обработана (`статус != PENDING`).
+
+### Мероприятия и отзывы (`/api/campus`)
+
+| Метод | Путь | Роль | Успех | Описание |
+| --- | --- | --- | --- | --- |
+| POST | `/api/campus/events/{eventId}/reviews` | `STUDENT` (участник) | 200 | `{rating, comment}`; `rating` 1–5, `comment` 20–1000; только после окончания мероприятия и подтверждённого участия; статус `PENDING_MODERATION` |
+| GET | `/api/campus/reviews/moderation` | `ACADEMIC_OFFICE` | 200 `EventModerationReviewView[]` | очередь отзывов на модерацию (`PENDING_MODERATION`), сортировка по `createdAt` ASC |
+| PATCH | `/api/campus/events/{eventId}/reviews/{reviewId}` | `ACADEMIC_OFFICE` | 200 | `{approved}`; переводит отзыв из `PENDING_MODERATION` в `APPROVED`/`REJECTED`, пишет `moderated_by`; повторное решение → `409` |
+
+Элемент очереди: `{id, eventId, eventTitle, studentName, group, rating, comment, createdAt, flaggedWords}`.
+
+Модерация отзывов — только учебная часть (организатор больше не модерирует). Мат не отклоняется автоматически: фильтр `BlockedWordsReviewFilterStrategy` возвращает найденные корни в `flaggedWords` (плюс нормализация `ё`→`е`), окончательное решение принимает сотрудник. Жёстко отклоняются фильтрами только спам и неверная длина (20–1000).
 
 ### Прочее
 

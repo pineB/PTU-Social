@@ -191,7 +191,7 @@ class CertificateRequestIT extends AbstractIntegrationTest {
 		MvcResult result = mockMvc.perform(post("/api/certificates")
 						.header(HttpHeaders.AUTHORIZATION, bearer(owner))
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"type\":\"" + type + "\"}"))
+						.content("{\"type\":\"" + type + "\",\"deliveryMethod\":\"PICKUP\"}"))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.status").value("PENDING"))
 				.andExpect(jsonPath("$.type").value(type))

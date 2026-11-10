@@ -21,6 +21,7 @@ import TeacherSubmissionsPage from './pages/TeacherSubmissionsPage';
 import { TaskWorkflowProvider } from './data/task-workflow';
 import { CampusWorkflowProvider } from './data/campus-workflow';
 import {
+  AcademicReviewModerationPage,
   BattlePassPage,
   CertificateRequestPage,
   CertificateManagementPage,
@@ -118,6 +119,7 @@ export default function App() {
                 <Route path="academic-office" element={<AcademicOfficeDashboard />} />
                 <Route path="academic-office/management" element={<AcademicManagementPage />} />
                 <Route path="academic-office/certificates" element={<CertificateManagementPage />} />
+                <Route path="academic-office/reviews" element={<AcademicReviewModerationPage />} />
                 <Route path="academic-office/schedule" element={<ScheduleManagementPage />} />
               </Route>
               <Route element={<RequireRole role="ADMIN" />}>

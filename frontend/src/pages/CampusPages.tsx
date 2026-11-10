@@ -17,6 +17,7 @@ import {
   InputLabel,
   LinearProgress,
   MenuItem,
+  Rating,
   Select,
   Stack,
   Tab,
@@ -42,7 +43,7 @@ import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
 import RateReviewRoundedIcon from '@mui/icons-material/RateReviewRounded';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { useCampusWorkflow, type CampusEvent, type InventoryItem, type PassReward, type ScheduleEntry } from '../data/campus-workflow';
-import { listOrganizerReviews, type OrganizerReview } from '../api/campus';
+import { listEventReviewModerationQueue, listOrganizerReviews, moderateCampusEventReview, type EventModerationReview, type OrganizerReview } from '../api/campus';
 import AuthenticatedImage from '../components/AuthenticatedImage';
 import { createCertificateRequest, downloadCertificateDocument, listCertificates, listMyCertificates, updateCertificateRequestStatus, uploadCertificateDocument, type CertificateRequestView, type CertificateStatus, type CertificateType } from '../api/certificates';
 import { useAuth } from '../auth/AuthProvider';
@@ -139,7 +140,7 @@ function EventCard({ eventId, reviewExpanded = false, showReview = true }: {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [reviewComment, setReviewComment] = useState('');
-  const [reviewRating, setReviewRating] = useState('5');
+  const [reviewRating, setReviewRating] = useState(5);
   const [reviewSuccess, setReviewSuccess] = useState(false);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [organizerReviewsOpen, setOrganizerReviewsOpen] = useState(false);
@@ -211,7 +212,7 @@ function EventCard({ eventId, reviewExpanded = false, showReview = true }: {
     setError('');
     setReviewSuccess(false);
     try {
-      await submitEventReview(selectedEventId, Number(reviewRating), reviewComment);
+      await submitEventReview(selectedEventId, reviewRating, reviewComment);
       setReviewComment('');
       setReviewSuccess(true);
     } catch (reviewError) {
@@ -339,10 +340,16 @@ function EventCard({ eventId, reviewExpanded = false, showReview = true }: {
               </Stack>
             ) : (reviewExpanded || isReviewOpen) ? (
               <Box component="form" onSubmit={handleSubmitReview} className="event-review-form">
-                <TextField select size="small" label="Оценка" value={reviewRating} onChange={(inputEvent) => setReviewRating(inputEvent.target.value)} fullWidth>
-                  {[5, 4, 3, 2, 1].map((rating) => <MenuItem key={rating} value={rating}>{rating}</MenuItem>)}
-                </TextField>
-                <TextField label="Комментарий" value={reviewComment} onChange={(inputEvent) => setReviewComment(inputEvent.target.value)} inputProps={{ maxLength: 1000 }} helperText="От 20 символов · отзыв проверит создатель мероприятия" multiline minRows={2} required fullWidth />
+                <Stack spacing={0.5}>
+                  <Typography variant="body2" color="text.secondary">Оценка</Typography>
+                  <Rating
+                    size="large"
+                    value={reviewRating}
+                    onChange={(_, value) => setReviewRating(value ?? 5)}
+                    aria-label="Оценка мероприятия"
+                  />
+                </Stack>
+                <TextField label="Комментарий" value={reviewComment} onChange={(inputEvent) => setReviewComment(inputEvent.target.value)} inputProps={{ maxLength: 1000 }} helperText="От 20 символов · отзыв проверит учебная часть" multiline minRows={2} required fullWidth />
                 <Button type="submit" variant="outlined" disabled={isLoading || reviewComment.trim().length < 20}>
                   {isLoading ? <CircularProgress size={18} /> : 'Отправить отзыв'}
                 </Button>
@@ -663,7 +670,7 @@ export function TeacherStudentsPage() {
 }
 
 export function EventManagementPage() {
-  const { events, createEvent, addEventGroup, awardEventPoints, moderateEventReview, teacherGroups, campusGroups, activityAwards, error: workflowError } = useCampusWorkflow();
+  const { events, createEvent, addEventGroup, awardEventPoints, teacherGroups, campusGroups, activityAwards, error: workflowError } = useCampusWorkflow();
   const { currentUser } = useAuth();
   const location = useLocation();
   const isTeacherPage = location.pathname.startsWith('/teacher/');
@@ -671,9 +678,6 @@ export function EventManagementPage() {
   const ownedEvents = events.filter((event) => event.creatorId === currentUser?.id);
   const groupEvents = events.filter((event) => event.format === 'group' && Date.parse(event.date) > Date.now());
   const creatorAwards = activityAwards.filter((award) => award.awardedById === currentUser?.id);
-  const pendingReviews = ownedEvents.flatMap((event) => event.reviews
-    .filter((review) => review.status === 'pending')
-    .map((review) => ({ event, review })));
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('Обучение');
@@ -687,7 +691,6 @@ export function EventManagementPage() {
   const [maxPoints, setMaxPoints] = useState('50');
   const [selectedGroups, setSelectedGroups] = useState<Record<string, string>>({});
   const [activityPercentages, setActivityPercentages] = useState<Record<string, string>>({});
-  const [managementTab, setManagementTab] = useState(0);
   const [isCreating, setIsCreating] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -772,24 +775,6 @@ export function EventManagementPage() {
     }
   }
 
-  async function handleReviewModeration(event: CampusEvent, reviewId: string, approve: boolean) {
-    if (actionLock.current) return;
-    actionLock.current = true;
-    const key = `review:${event.id}:${reviewId}`;
-    setBusyAction(key);
-    setError('');
-    setSuccess('');
-    try {
-      await moderateEventReview(event.id, reviewId, approve, creator);
-      setSuccess(approve ? 'Отзыв одобрен, студенту начислено 5 единиц валюты.' : 'Отзыв отклонён без начисления валюты.');
-    } catch (moderationError) {
-      setError(moderationError instanceof Error ? moderationError.message : 'Не удалось обработать отзыв.');
-    } finally {
-      actionLock.current = false;
-      setBusyAction(null);
-    }
-  }
-
   return (
     <Box className="campus-page">
       <PageHeader title="Мероприятия и баллы">
@@ -798,11 +783,6 @@ export function EventManagementPage() {
       {error && <Alert severity="error">{error}</Alert>}
       {workflowError && <Alert severity="error">{workflowError}</Alert>}
       {success && <Alert severity="success">{success}</Alert>}
-      <Tabs value={managementTab} onChange={(_, value: number) => setManagementTab(value)} aria-label="Разделы мероприятий">
-        <Tab label="Мероприятия" />
-        <Tab label="Отзывы" />
-      </Tabs>
-      {managementTab === 0 && <>
       <SectionCard title="Создать мероприятие" icon={<EventAvailableRoundedIcon />}>
         <Box component="form" onSubmit={handleCreate} className="campus-form">
           <TextField label="Название" value={title} onChange={(event) => setTitle(event.target.value)} required fullWidth />
@@ -943,38 +923,6 @@ export function EventManagementPage() {
               </Stack>
             ))}
           </Stack>
-        </SectionCard>
-      )}
-      </>}
-      {managementTab === 1 && (
-        <SectionCard title="Отзывы на модерации" icon={<RateReviewRoundedIcon />}>
-          {pendingReviews.length === 0 ? <Typography color="text.secondary">Новых отзывов нет.</Typography> : (
-            <Stack spacing={1.5}>
-              {pendingReviews.map(({ event, review }) => {
-                const reviewActionKey = `review:${event.id}:${review.id}`;
-                return (
-                  <Box className="event-review-moderation" key={`${event.id}:${review.id}`}>
-                    <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" gap={1}>
-                      <Box>
-                        <Typography fontWeight={700}>{review.studentName} · оценка {review.rating}/5</Typography>
-                        <Typography variant="caption" color="text.secondary">{event.title} · {formatDate(event.endsAt)}</Typography>
-                      </Box>
-                      <Chip size="small" label="Ожидает проверки" />
-                    </Stack>
-                    <Typography variant="body2" mt={1}>{review.comment}</Typography>
-                    <Stack direction="row" flexWrap="wrap" gap={1} mt={1}>
-                      <Button size="small" variant="contained" disabled={busyAction !== null} onClick={() => void handleReviewModeration(event, review.id, true)}>
-                        {busyAction === reviewActionKey ? <CircularProgress size={16} color="inherit" /> : 'Одобрить · +5'}
-                      </Button>
-                      <Button size="small" variant="outlined" color="inherit" disabled={busyAction !== null} onClick={() => void handleReviewModeration(event, review.id, false)}>
-                        Отклонить
-                      </Button>
-                    </Stack>
-                  </Box>
-                );
-              })}
-            </Stack>
-          )}
         </SectionCard>
       )}
     </Box>
@@ -2228,6 +2176,95 @@ export function CertificateRequestPage() {
             </Stack>
           ))}
         </Stack>
+      </SectionCard>
+    </Box>
+  );
+}
+
+export function AcademicReviewModerationPage() {
+  const [reviews, setReviews] = useState<EventModerationReview[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const actionLock = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    void listEventReviewModerationQueue()
+      .then((items) => {
+        if (active) setReviews(items);
+      })
+      .catch((loadError: unknown) => {
+        if (active) setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить отзывы.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  async function handleDecision(review: EventModerationReview, approved: boolean) {
+    if (actionLock.current) return;
+    actionLock.current = true;
+    setBusyId(review.id);
+    setError('');
+    setSuccess('');
+    try {
+      await moderateCampusEventReview(review.eventId, review.id, approved);
+      setReviews((current) => current.filter((item) => item.id !== review.id));
+      setSuccess(approved ? 'Отзыв одобрен.' : 'Отзыв отклонён.');
+    } catch (decisionError) {
+      setError(decisionError instanceof Error ? decisionError.message : 'Не удалось обработать отзыв.');
+    } finally {
+      actionLock.current = false;
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <Box className="campus-page">
+      <PageHeader title="Отзывы на модерации">
+        <Typography color="text.secondary">Проверка отзывов о мероприятиях: нецензурная лексика, спам и оскорбления</Typography>
+      </PageHeader>
+      {error && <Alert severity="error">{error}</Alert>}
+      {success && <Alert severity="success">{success}</Alert>}
+      <SectionCard title={`Ожидают проверки · ${reviews.length}`} icon={<RateReviewRoundedIcon />}>
+        {loading ? <CircularProgress size={24} /> : reviews.length === 0 ? (
+          <Typography color="text.secondary">Все отзывы рассмотрены.</Typography>
+        ) : (
+          <Stack spacing={1.5}>
+            {reviews.map((review) => (
+              <Box className="event-review-moderation" key={review.id}>
+                <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" gap={1}>
+                  <Box>
+                    <Typography fontWeight={700}>{review.studentName}{review.group ? ` · ${review.group}` : ''}</Typography>
+                    <Typography variant="caption" color="text.secondary">{review.eventTitle} · {formatDate(review.createdAt)}</Typography>
+                  </Box>
+                  <Stack direction="row" alignItems="center" gap={1}>
+                    <Rating value={review.rating} readOnly size="small" aria-label={`Оценка ${review.rating} из 5`} />
+                    <Chip size="small" label="Ожидает проверки" />
+                  </Stack>
+                </Stack>
+                <Typography variant="body2" mt={1} sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{review.comment}</Typography>
+                {review.flaggedWords.length > 0 && (
+                  <Alert severity="warning" sx={{ mt: 1 }}>
+                    Найдены недопустимые слова: {review.flaggedWords.join(', ')}
+                  </Alert>
+                )}
+                <Stack direction="row" flexWrap="wrap" gap={1} mt={1}>
+                  <Button size="small" variant="contained" color="success" disabled={busyId !== null} onClick={() => void handleDecision(review, true)}>
+                    {busyId === review.id ? <CircularProgress size={16} color="inherit" /> : 'Одобрить'}
+                  </Button>
+                  <Button size="small" variant="outlined" color="error" disabled={busyId !== null} onClick={() => void handleDecision(review, false)}>
+                    Отклонить
+                  </Button>
+                </Stack>
+              </Box>
+            ))}
+          </Stack>
+        )}
       </SectionCard>
     </Box>
   );

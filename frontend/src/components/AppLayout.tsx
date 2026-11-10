@@ -167,6 +167,10 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
               <ListItemIcon className="role-icon"><FactCheckRoundedIcon /></ListItemIcon>
               <ListItemText primary="Заявки на справки" primaryTypographyProps={{ fontWeight: location.pathname === '/academic-office/certificates' ? 700 : 600, fontSize: 14 }} />
             </ListItemButton>
+            <ListItemButton component={NavLink} to="/academic-office/reviews" onClick={onNavigate} className={`role-link${isActive('/academic-office/reviews') ? ' role-link-active' : ''}`} aria-label="Отзывы на модерации" aria-current={isActive('/academic-office/reviews') ? 'page' : undefined}>
+              <ListItemIcon className="role-icon"><RateReviewRoundedIcon /></ListItemIcon>
+              <ListItemText primary="Отзывы на модерации" primaryTypographyProps={{ fontWeight: location.pathname === '/academic-office/reviews' ? 700 : 600, fontSize: 14 }} />
+            </ListItemButton>
             <ListItemButton component={NavLink} to="/academic-office/schedule" onClick={onNavigate} className={`role-link${isActive('/academic-office/schedule') ? ' role-link-active' : ''}`} aria-label="Расписание занятий" aria-current={isActive('/academic-office/schedule') ? 'page' : undefined}>
               <ListItemIcon className="role-icon"><CalendarMonthRoundedIcon /></ListItemIcon>
               <ListItemText primary="Расписание" primaryTypographyProps={{ fontWeight: location.pathname === '/academic-office/schedule' ? 700 : 600, fontSize: 14 }} />
@@ -303,6 +307,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
     '/teacher/events': 'Мероприятия и баллы',
     '/organizer/events': 'Мероприятия и баллы',
     '/academic-office/certificates': 'Заявления на справки',
+    '/academic-office/reviews': 'Отзывы на модерации',
     '/academic-office/schedule': 'Расписание занятий',
     '/admin/pass': 'Управление ПТУ-пассом',
     '/admin/cases': 'Кейсы и награды',

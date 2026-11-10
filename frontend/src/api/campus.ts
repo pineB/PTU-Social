@@ -40,6 +40,18 @@ export interface OrganizerReview {
   createdAt: string;
 }
 
+export interface EventModerationReview {
+  id: string;
+  eventId: string;
+  eventTitle: string;
+  studentName: string;
+  group: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+  flaggedWords: string[];
+}
+
 export interface EventParticipant {
   id: string;
   studentId?: string;
@@ -261,6 +273,11 @@ export async function submitCampusEventReview(eventId: string, rating: number, c
 
 export async function moderateCampusEventReview(eventId: string, reviewId: string, approved: boolean): Promise<void> {
   await apiClient.patch(`/campus/events/${eventId}/reviews/${reviewId}`, { approved });
+}
+
+export async function listEventReviewModerationQueue(): Promise<EventModerationReview[]> {
+  const response = await apiClient.get<EventModerationReview[]>('/campus/reviews/moderation');
+  return response.data;
 }
 
 export async function getCampusGroups(): Promise<CampusGroup[]> {

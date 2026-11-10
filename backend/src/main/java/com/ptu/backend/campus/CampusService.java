@@ -66,6 +66,34 @@ public class CampusService {
                 organizerId);
     }
 
+    @Transactional(readOnly = true)
+    public List<EventModerationReviewView> moderationQueue(UserPrincipal principal) {
+        requireRole(principal, Role.ACADEMIC_OFFICE);
+        return jdbc.query("""
+                select r.id, r.activity_id, a.title event_title, u.full_name student_name,
+                       coalesce(g.name, '') group_name, r.rating, r.text, r.created_at
+                from reviews r
+                join activities a on a.id = r.activity_id
+                join users u on u.id = r.author_id
+                left join student_profiles sp on sp.user_id = r.author_id
+                left join study_groups g on g.id = sp.group_id
+                where r.status = 'PENDING_MODERATION'
+                order by r.created_at, r.id
+                """, (rs, row) -> {
+                    String text = rs.getString("text");
+                    return new EventModerationReviewView(
+                            Long.toString(rs.getLong("id")),
+                            Long.toString(rs.getLong("activity_id")),
+                            rs.getString("event_title"),
+                            rs.getString("student_name"),
+                            rs.getString("group_name"),
+                            rs.getInt("rating"),
+                            text,
+                            rs.getTimestamp("created_at").toInstant().toString(),
+                            reviewService.flaggedWords(text));
+                });
+    }
+
     @Transactional
     public EventView createEvent(UserPrincipal principal, CreateEventRequest request) {
         requireRole(principal, Role.TEACHER, Role.ORGANIZER);
@@ -304,19 +332,12 @@ public class CampusService {
 
     @Transactional
     public void moderateEventReview(UserPrincipal principal, long eventId, long reviewId, ReviewDecision decision) {
+        requireRole(principal, Role.ACADEMIC_OFFICE);
         if (decision == null || decision.approved() == null) {
             throw ApiException.badRequest("Решение модерации обязательно");
         }
-        EventRow event = eventForUpdate(eventId);
-        UUID groupId = jdbc.query("""
-                select sp.group_id from reviews r join student_profiles sp on sp.user_id = r.author_id
-                where r.id = ? and r.activity_id = ?
-                """, (rs, row) -> rs.getObject(1, UUID.class), reviewId, eventId).stream().findFirst()
-                .orElseThrow(() -> ApiException.notFound("Отзыв не найден"));
-        try {
-            requireEventManager(principal, event, groupId);
-        } catch (ApiException ex) {
-            throw ApiException.forbidden("Нет прав на модерацию отзыва");
+        if (count("select count(*) from activities where id = ?", eventId) == 0) {
+            throw ApiException.notFound("Мероприятие не найдено");
         }
         int changed = jdbc.update("""
                 update reviews set status = ?, moderated_by = ?, updated_at = now()
