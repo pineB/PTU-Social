@@ -5,6 +5,11 @@ export interface CatalogItem {
   name: string;
 }
 
+export interface ManagedDiscipline extends CatalogItem {
+  departmentId: string;
+  departmentName: string;
+}
+
 export interface ManagedGroup {
   id: string;
   name: string;
@@ -29,6 +34,13 @@ export interface ManagedTeacher {
 }
 
 export interface ManagedAcademicOfficeUser {
+  id: string;
+  fullName: string;
+  email: string;
+  active: boolean;
+}
+
+export interface AdminTestStudent {
   id: string;
   fullName: string;
   email: string;
@@ -65,6 +77,19 @@ export async function createAcademicOfficeUser(request: CreateAcademicOfficeUser
   return response.data;
 }
 
+export async function listAdminTestStudents(): Promise<AdminTestStudent[]> {
+  const response = await apiClient.get<AdminTestStudent[]>('/admin/test-grants/students');
+  return response.data;
+}
+
+export async function grantAdminTestCurrency(studentId: string, amount: number): Promise<void> {
+  await apiClient.post('/admin/test-grants/currency', { studentId, amount });
+}
+
+export async function grantAdminTestItem(studentId: string, rewardId: string): Promise<void> {
+  await apiClient.post('/admin/test-grants/items', { studentId, rewardId });
+}
+
 export async function getAcademicFaculties(): Promise<CatalogItem[]> {
   const response = await apiClient.get<CatalogItem[]>('/academic/management/faculties');
   return response.data;
@@ -84,6 +109,28 @@ export async function getAcademicDepartments(): Promise<CatalogItem[]> {
   return response.data;
 }
 
+export async function createAcademicDepartment(name: string): Promise<CatalogItem> {
+  const response = await apiClient.post<CatalogItem>('/academic/management/departments', { name });
+  return response.data;
+}
+
+export async function deleteAcademicDepartment(departmentId: string): Promise<void> {
+  await apiClient.delete(`/academic/management/departments/${departmentId}`);
+}
+
+export async function getAllAcademicDisciplines(): Promise<ManagedDiscipline[]> {
+  const response = await apiClient.get<ManagedDiscipline[]>('/academic/management/disciplines');
+  return response.data;
+}
+
+export async function createAcademicDiscipline(departmentId: string, name: string): Promise<ManagedDiscipline> {
+  const response = await apiClient.post<ManagedDiscipline>(
+    `/academic/management/departments/${departmentId}/disciplines`,
+    { name },
+  );
+  return response.data;
+}
+
 export async function renameAcademicDepartment(departmentId: string, name: string): Promise<CatalogItem> {
   const response = await apiClient.patch<CatalogItem>(`/academic/management/departments/${departmentId}`, { name });
   return response.data;
@@ -92,6 +139,10 @@ export async function renameAcademicDepartment(departmentId: string, name: strin
 export async function getAcademicDisciplines(departmentId: string): Promise<CatalogItem[]> {
   const response = await apiClient.get<CatalogItem[]>(`/academic/management/departments/${departmentId}/disciplines`);
   return response.data;
+}
+
+export async function deleteAcademicDiscipline(disciplineId: string): Promise<void> {
+  await apiClient.delete(`/academic/management/disciplines/${disciplineId}`);
 }
 
 export async function listManagedGroups(): Promise<ManagedGroup[]> {

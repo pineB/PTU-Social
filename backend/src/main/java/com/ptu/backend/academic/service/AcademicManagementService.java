@@ -21,8 +21,11 @@ import com.ptu.backend.academic.repo.StudyGroupRepository;
 import com.ptu.backend.academic.repo.TeacherAssignmentRepository;
 import com.ptu.backend.academic.web.AcademicManagementController.CatalogItem;
 import com.ptu.backend.academic.web.AcademicManagementController.CreateAssignmentRequest;
+import com.ptu.backend.academic.web.AcademicManagementController.CreateDepartmentRequest;
 import com.ptu.backend.academic.web.AcademicManagementController.CreateGroupRequest;
 import com.ptu.backend.academic.web.AcademicManagementController.CreateFacultyRequest;
+import com.ptu.backend.academic.web.AcademicManagementController.CreateDisciplineRequest;
+import com.ptu.backend.academic.web.AcademicManagementController.DisciplineItem;
 import com.ptu.backend.academic.web.AcademicManagementController.ManagedAssignment;
 import com.ptu.backend.academic.web.AcademicManagementController.ManagedGroup;
 import com.ptu.backend.academic.web.AcademicManagementController.ManagedTeacher;
@@ -99,6 +102,40 @@ public class AcademicManagementService {
 	}
 
 	@Transactional
+	public CatalogItem createDepartment(CreateDepartmentRequest request) {
+		try {
+			Department department = departments.saveAndFlush(new Department(request.name().trim()));
+			return new CatalogItem(department.getId(), department.getName());
+		}
+		catch (DataIntegrityViolationException exception) {
+			throw ApiException.conflict("Кафедра с таким названием уже существует");
+		}
+	}
+
+	@Transactional
+	public void deleteDepartment(UUID departmentId) {
+		Department department = departments.findById(departmentId)
+				.orElseThrow(() -> ApiException.notFound("Кафедра не найдена"));
+		Long disciplinesCount = jdbc.queryForObject(
+				"select count(*) from disciplines where department_id = ?", Long.class, departmentId);
+		if (disciplinesCount != null && disciplinesCount > 0) {
+			throw ApiException.conflict("Сначала удалите дисциплины этой кафедры. Используемые в учебном процессе дисциплины удалить нельзя.");
+		}
+		Long invitesCount = jdbc.queryForObject(
+				"select count(*) from teacher_invites where department_id = ?", Long.class, departmentId);
+		if (invitesCount != null && invitesCount > 0) {
+			throw ApiException.conflict("Нельзя удалить кафедру: с ней связаны приглашения преподавателей.");
+		}
+		try {
+			departments.delete(department);
+			departments.flush();
+		}
+		catch (DataIntegrityViolationException exception) {
+			throw ApiException.conflict("Нельзя удалить кафедру, пока с ней связаны учебные данные.");
+		}
+	}
+
+	@Transactional
 	public CatalogItem renameDepartment(UUID departmentId, RenameDepartmentRequest request) {
 		Department department = departments.findById(departmentId)
 				.orElseThrow(() -> ApiException.notFound("Кафедра не найдена"));
@@ -110,6 +147,28 @@ public class AcademicManagementService {
 		catch (DataIntegrityViolationException exception) {
 			throw ApiException.conflict("Кафедра с таким названием уже существует");
 		}
+	}
+
+	@Transactional(readOnly = true)
+	public List<DisciplineItem> allDisciplines() {
+		Map<UUID, String> departmentNames = departments.findAll().stream()
+				.collect(Collectors.toMap(Department::getId, Department::getName));
+		return disciplines.findAll(Sort.by("name")).stream()
+				.map(discipline -> new DisciplineItem(discipline.getId(), discipline.getName(),
+						discipline.getDepartmentId(), departmentNames.getOrDefault(discipline.getDepartmentId(), "")))
+				.toList();
+	}
+
+	@Transactional
+	public DisciplineItem createDiscipline(UUID departmentId, CreateDisciplineRequest request) {
+		Department department = departments.findById(departmentId)
+				.orElseThrow(() -> ApiException.notFound("Кафедра не найдена"));
+		if (disciplines.findByNameIgnoreCaseAndDepartmentId(request.name().trim(), departmentId).isPresent()) {
+			throw ApiException.conflict("Такая дисциплина уже есть на этой кафедре");
+		}
+		Discipline discipline = new Discipline(request.name().trim(), departmentId);
+		Discipline saved = disciplines.saveAndFlush(discipline);
+		return new DisciplineItem(saved.getId(), saved.getName(), departmentId, department.getName());
 	}
 
 	@Transactional(readOnly = true)
@@ -129,6 +188,29 @@ public class AcademicManagementService {
 				.map(group -> new ManagedGroup(group.getId(), group.getName(), group.getFacultyId(),
 						facultyNames.getOrDefault(group.getFacultyId(), "")))
 				.toList();
+	}
+
+	@Transactional
+	public void deleteDiscipline(UUID disciplineId) {
+		Discipline discipline = disciplines.findById(disciplineId)
+				.orElseThrow(() -> ApiException.notFound("Дисциплина не найдена"));
+		Integer references = jdbc.queryForObject("""
+				select
+					(select count(*) from teacher_assignments where discipline_id = ?) +
+					(select count(*) from teacher_invite_assignments where discipline_id = ?) +
+					(select count(*) from workspace_tasks where discipline_id = ?) +
+					(select count(*) from campus_schedule_entries where discipline_id = ?)
+				""", Integer.class, disciplineId, disciplineId, disciplineId, disciplineId);
+		if (references != null && references > 0) {
+			throw ApiException.conflict("Нельзя удалить дисциплину, пока она используется в назначениях, заданиях или расписании");
+		}
+		try {
+			disciplines.delete(discipline);
+			disciplines.flush();
+		}
+		catch (DataIntegrityViolationException exception) {
+			throw ApiException.conflict("Нельзя удалить дисциплину, пока она используется в учебном процессе");
+		}
 	}
 
 	@Transactional

@@ -2,12 +2,21 @@ package com.ptu.backend.campus;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class CampusRulesTest {
+    @Test
+    void eventOffsetDateTimesAreNormalizedToUtc() {
+        assertEquals(LocalDateTime.of(2026, 11, 10, 16, 0),
+                CampusService.parseDateTime("2026-11-10T19:00:00+03:00", "date"));
+        assertEquals(LocalDateTime.of(2026, 11, 10, 19, 0),
+                CampusService.parseDateTime("2026-11-10T19:00", "date"));
+    }
+
     @Test
     void groupThresholdRoundsUp() {
         assertEquals(0, CampusRules.requiredGroupParticipation(0, 80));
@@ -39,5 +48,11 @@ class CampusRulesTest {
         assertEquals(1, CampusRules.weightedIndex(List.of(55, 30, 12, 3), 55));
         assertEquals(3, CampusRules.weightedIndex(List.of(55, 30, 12, 3), 99));
         assertThrows(IllegalArgumentException.class, () -> CampusRules.weightedIndex(List.of(1, 2), 3));
+    }
+
+    @Test
+    void weightedSelectionSupportsTotalsBeyondIntegerRange() {
+        assertEquals(1, CampusRules.weightedIndex(List.of(Integer.MAX_VALUE, Integer.MAX_VALUE),
+                (long) Integer.MAX_VALUE));
     }
 }

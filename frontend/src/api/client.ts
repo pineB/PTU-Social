@@ -58,7 +58,9 @@ apiClient.interceptors.response.use(
       );
     }
 
-    return Promise.reject(error);
+    return Promise.reject(new Error(errorMessage ?? 'Не удалось выполнить запрос. Проверьте данные и попробуйте ещё раз.', {
+      cause: error,
+    }));
   },
 );
 

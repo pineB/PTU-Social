@@ -13,9 +13,14 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
+  InputLabel,
   LinearProgress,
   MenuItem,
+  Select,
   Stack,
+  Tab,
+  Tabs,
   TextField,
   Typography,
 } from '@mui/material';
@@ -34,23 +39,34 @@ import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import NotificationsActiveRoundedIcon from '@mui/icons-material/NotificationsActiveRounded';
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
-import { Link, useLocation } from 'react-router-dom';
+import RateReviewRoundedIcon from '@mui/icons-material/RateReviewRounded';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { useCampusWorkflow, type CampusEvent, type InventoryItem, type PassReward, type ScheduleEntry } from '../data/campus-workflow';
+import { listOrganizerReviews, type OrganizerReview } from '../api/campus';
+import AuthenticatedImage from '../components/AuthenticatedImage';
 import { createCertificateRequest, downloadCertificateDocument, listCertificates, listMyCertificates, updateCertificateRequestStatus, uploadCertificateDocument, type CertificateRequestView, type CertificateStatus, type CertificateType } from '../api/certificates';
 import { useAuth } from '../auth/AuthProvider';
-import { listManagedTeachers, type ManagedTeacher } from '../api/administration';
+import { getAllAcademicDisciplines, listManagedTeachers, type ManagedDiscipline, type ManagedTeacher } from '../api/administration';
 
 const certificateTypeLabels: Record<CertificateType, string> = {
   EDUCATION: 'Справка об обучении',
   INCOME: 'Справка о доходах',
   MILITARY: 'Справка для военкомата',
+  OTHER: 'Свой вариант',
 };
 
 const certificateStatusLabels: Record<CertificateStatus, string> = {
-  PENDING: 'Подана',
-  APPROVED: 'Одобрена',
+  PENDING: 'Новая',
+  IN_PROGRESS: 'В работе',
+  READY: 'Ожидает выдачи',
+  APPROVED: 'Ожидает выдачи',
+  ISSUED: 'Выдана',
   REJECTED: 'Отклонена',
 };
+
+function certificateTitle(request: CertificateRequestView): string {
+  return request.type === 'OTHER' ? request.customTitle ?? 'Свой вариант' : certificateTypeLabels[request.type];
+}
 
 function PageHeader({ title, children }: { title: string; children?: ReactNode }) {
   return (
@@ -107,12 +123,17 @@ function canStudentReview(event: CampusEvent, studentId: string, studentName: st
   return confirmed >= Math.ceil(registration.groupSize * event.groupMinPercent / 100);
 }
 
-function EventCard({ eventId, reviewExpanded = false }: { eventId: string; reviewExpanded?: boolean }) {
+function EventCard({ eventId, reviewExpanded = false, showReview = true }: {
+  eventId: string;
+  reviewExpanded?: boolean;
+  showReview?: boolean;
+}) {
   const { events, joinEvent, confirmGroupParticipation, submitEventReview } = useCampusWorkflow();
   const { currentUser } = useAuth();
   const studentId = currentUser?.id ?? '';
   const studentName = currentUser?.fullName ?? '';
   const studentGroup = currentUser?.groupName ?? '';
+  const studentGroupId = currentUser?.groupId ?? null;
   const event = events.find((item) => item.id === eventId);
   const selectedEventId = event?.id;
   const [isLoading, setIsLoading] = useState(false);
@@ -121,8 +142,13 @@ function EventCard({ eventId, reviewExpanded = false }: { eventId: string; revie
   const [reviewRating, setReviewRating] = useState('5');
   const [reviewSuccess, setReviewSuccess] = useState(false);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
+  const [organizerReviewsOpen, setOrganizerReviewsOpen] = useState(false);
+  const [organizerReviewsLoading, setOrganizerReviewsLoading] = useState(false);
+  const [organizerReviewsError, setOrganizerReviewsError] = useState('');
+  const [organizerReviews, setOrganizerReviews] = useState<OrganizerReview[]>([]);
   const actionLock = useRef(false);
   if (!event) return null;
+  const organizerId = event.creatorId;
 
   async function handleJoin(groupRegistrationId?: string) {
     if (actionLock.current || isLoading) return;
@@ -142,7 +168,9 @@ function EventCard({ eventId, reviewExpanded = false }: { eventId: string; revie
   }
 
   const currentStudentParticipant = event.participants.find((participant) => participant.studentId === studentId || participant.studentName === studentName);
-  const currentStudentEnrolled = currentStudentParticipant !== undefined;
+  const currentStudentEnrolled = Boolean(currentStudentParticipant && (
+    event.format === 'individual' || currentStudentParticipant.participationConfirmed
+  ));
   const currentStudentRegistration = event.groupRegistrations.find((registration) => registration.id === currentStudentParticipant?.groupRegistrationId);
   const currentGroupParticipationCount = currentStudentRegistration
     ? event.participants.filter((participant) => participant.groupRegistrationId === currentStudentRegistration.id && participant.participationConfirmed).length
@@ -155,6 +183,25 @@ function EventCard({ eventId, reviewExpanded = false }: { eventId: string; revie
     (event.format === 'individual' || (currentStudentRegistration && currentGroupParticipationCount >= currentGroupParticipationRequired)),
   );
   const currentStudentReview = event.reviews.find((review) => review.studentId === studentId || review.studentName === studentName);
+  const eventRating = event.rating;
+
+  async function handleOpenOrganizerReviews() {
+    if (!organizerId) {
+      setOrganizerReviewsError('Не удалось определить организатора мероприятия.');
+      setOrganizerReviewsOpen(true);
+      return;
+    }
+    setOrganizerReviewsOpen(true);
+    setOrganizerReviewsLoading(true);
+    setOrganizerReviewsError('');
+    try {
+      setOrganizerReviews(await listOrganizerReviews(organizerId));
+    } catch (requestError) {
+      setOrganizerReviewsError(requestError instanceof Error ? requestError.message : 'Не удалось загрузить отзывы организатора.');
+    } finally {
+      setOrganizerReviewsLoading(false);
+    }
+  }
 
   async function handleSubmitReview(formEvent: FormEvent<HTMLFormElement>) {
     formEvent.preventDefault();
@@ -200,7 +247,22 @@ function EventCard({ eventId, reviewExpanded = false }: { eventId: string; revie
           <Box className="campus-event-facts">
             <Typography variant="body2"><strong>Место</strong> · {event.location}</Typography>
             <Typography variant="body2"><strong>Награда</strong> · {event.activityType}, до {event.maxPoints} баллов</Typography>
-            <Typography variant="body2"><strong>Мест</strong> · {event.capacity} участников · организатор: {event.createdBy}</Typography>
+            <Typography variant="body2">
+              <strong>Мест</strong> · {event.capacity} участников · организатор:{' '}
+              <Button
+                size="small"
+                variant="text"
+                onClick={() => void handleOpenOrganizerReviews()}
+                sx={{ minWidth: 0, p: 0, verticalAlign: 'baseline', textTransform: 'none', fontSize: 'inherit', fontWeight: 700 }}
+              >
+                {event.createdBy}
+              </Button>
+            </Typography>
+            <Typography variant="body2" color={eventRating === null ? 'text.secondary' : 'warning.dark'}>
+              <strong>Рейтинг</strong> · {eventRating === null
+                ? 'появится после накопления достаточного числа одобренных отзывов'
+                : `★ ${eventRating.toFixed(1)} из 5`}
+            </Typography>
             {event.format === 'group' && <Typography variant="body2"><strong>Порог группы</strong> · {event.groupMinPercent}%</Typography>}
           </Box>
         </Box>
@@ -216,14 +278,17 @@ function EventCard({ eventId, reviewExpanded = false }: { eventId: string; revie
             const joined = event.participants.filter((participant) => participant.groupRegistrationId === registration.id && participant.participationConfirmed).length;
             const needed = Math.ceil(registration.groupSize * (event.groupMinPercent ?? 0) / 100);
             const thresholdReached = joined >= needed;
-            const memberJoined = event.participants.some((participant) => participant.groupRegistrationId === registration.id && participant.studentName === studentName);
+            const memberEntry = event.participants.find((participant) => participant.groupRegistrationId === registration.id && participant.studentId === studentId);
+            const memberJoined = memberEntry?.participationConfirmed === true;
             return (
               <Box className="event-group-registration" key={registration.id}>
                 <Typography variant="body2" fontWeight={650}>{registration.group} · {joined} из {registration.groupSize} подтвердили участие</Typography>
                 <Typography variant="caption" color="text.secondary">Порог: {formatNounCount(needed, 'участник', 'участника', 'участников')} · {thresholdReached ? 'группа допущена' : 'пока не набран'}</Typography>
-                {!memberJoined && registration.group === studentGroup && (
+                {memberEntry && !memberJoined && registration.group === studentGroup && (
                   <Box className="event-confirm-action">
-                    <Typography variant="caption" color="text.secondary">Ваш ответ влияет на допуск всей группы к мероприятию</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Вы включены в заявку группы. Подтвердите личное участие.
+                    </Typography>
                     <Button variant="contained" disabled={isLoading} onClick={() => void handleJoin(registration.id)}>
                       {isLoading ? <CircularProgress size={18} color="inherit" /> : 'Я участвую'}
                     </Button>
@@ -233,6 +298,24 @@ function EventCard({ eventId, reviewExpanded = false }: { eventId: string; revie
               </Box>
             );
           })}
+          {!event.groupRegistrations.some((registration) => registration.group === studentGroup) && studentGroupId && (
+            <Box className="event-group-registration event-group-self-signup">
+              <Typography variant="body2" fontWeight={650}>{studentGroup || 'Ваша группа'} ещё не записана</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {currentUser?.groupLeader
+                  ? 'Староста может записать группу; каждый студент отдельно подтвердит участие.'
+                  : 'Записать группу на мероприятие может её староста или преподаватель.'}
+              </Typography>
+              {currentUser?.groupLeader && (
+                <Button variant="contained" disabled={isLoading} onClick={() => void handleJoin()}>
+                  {isLoading ? <CircularProgress size={18} color="inherit" /> : 'Записаться от группы'}
+                </Button>
+              )}
+            </Box>
+          )}
+          {!studentGroupId && (
+            <Alert severity="info">Чтобы записаться на коллективное мероприятие, сначала подтвердите свою учебную группу.</Alert>
+          )}
         </Box>
         )}
         {currentStudentEnrolled && Date.parse(event.endsAt) <= Date.now() && event.format === 'group' && !currentStudentAttended && (
@@ -242,7 +325,7 @@ function EventCard({ eventId, reviewExpanded = false }: { eventId: string; revie
           <Typography variant="caption" display="block" mt={1.5} color="success.main">Вы записаны · создатель начислит баллы после завершения мероприятия</Typography>
         )}
         {!currentStudentEnrolled && Date.parse(event.endsAt) <= Date.now() && <Chip size="small" sx={{ mt: 1.5 }} label="Мероприятие завершено" />}
-        {currentStudentAttended && Date.parse(event.endsAt) <= Date.now() && (
+        {showReview && currentStudentAttended && Date.parse(event.endsAt) <= Date.now() && (
           <Box className="event-review event-review-finished">
             <Box>
               <Chip size="small" label="Мероприятие завершено" color="success" />
@@ -273,6 +356,35 @@ function EventCard({ eventId, reviewExpanded = false }: { eventId: string; revie
           </Box>
         )}
       </CardContent>
+      <Dialog open={organizerReviewsOpen} onClose={() => setOrganizerReviewsOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Отзывы об организаторе · {event.createdBy}</DialogTitle>
+        <DialogContent dividers>
+          {organizerReviewsLoading && <Box display="grid" sx={{ placeItems: 'center', py: 3 }}><CircularProgress aria-label="Загрузка отзывов организатора" /></Box>}
+          {organizerReviewsError && <Alert severity="error">{organizerReviewsError}</Alert>}
+          {!organizerReviewsLoading && !organizerReviewsError && organizerReviews.length === 0 && (
+            <Typography color="text.secondary">Одобренных отзывов об организаторе пока нет.</Typography>
+          )}
+          {!organizerReviewsLoading && organizerReviews.length > 0 && (
+            <Stack divider={<Divider flexItem />} spacing={1.5}>
+              {organizerReviews.map((review) => (
+                <Box key={review.id} py={0.5}>
+                  <Stack direction="row" justifyContent="space-between" gap={1} alignItems="flex-start">
+                    <Box>
+                      <Typography fontWeight={700}>{review.studentName}</Typography>
+                      <Typography variant="caption" color="text.secondary">{review.eventTitle} · {formatDate(review.createdAt)}</Typography>
+                    </Box>
+                    <Chip size="small" color="warning" label={`★ ${review.rating}/5`} />
+                  </Stack>
+                  <Typography variant="body2" mt={1} sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{review.comment}</Typography>
+                </Box>
+              ))}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOrganizerReviewsOpen(false)}>Закрыть</Button>
+        </DialogActions>
+      </Dialog>
     </Card>
   );
 }
@@ -282,32 +394,38 @@ export function EventsPage() {
   const { currentUser } = useAuth();
   const studentId = currentUser?.id ?? '';
   const studentName = currentUser?.fullName ?? '';
-  const [reviewMode, setReviewMode] = useState(false);
-  const pendingReviewEvents = events.filter((event) => canStudentReview(event, studentId, studentName));
-  const visibleEvents = reviewMode ? pendingReviewEvents : events;
+  const [selectedTab, setSelectedTab] = useState(0);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const activeEvents = events.filter((event) => Date.parse(event.endsAt) > now);
+  const reviewEvents = events.filter((event) => Date.parse(event.endsAt) <= now && (
+    canStudentReview(event, studentId, studentName)
+    || event.reviews.some((review) => review.studentId === studentId)
+  ));
   return (
     <Box className="campus-page">
       <PageHeader title="Мероприятия">
-        <Typography color="text.secondary">{formatNounCount(events.filter((event) => event.participants.some((participant) => participant.studentId === studentId || participant.studentName === studentName)).length, 'мероприятие', 'мероприятия', 'мероприятий')} в вашем списке</Typography>
+        <Typography color="text.secondary">{formatNounCount(activeEvents.filter((event) => event.participants.some((participant) => participant.studentId === studentId || participant.studentName === studentName)).length, 'мероприятие', 'мероприятия', 'мероприятий')} в вашем списке</Typography>
       </PageHeader>
       {error && <Alert severity="error">{error}</Alert>}
-      {!isLoading && !error && events.length === 0 && <Alert severity="info">Активных мероприятий пока нет.</Alert>}
-      {pendingReviewEvents.length > 0 && (
-        <Button
-          variant={reviewMode ? 'contained' : 'outlined'}
-          className="pending-reviews-button"
-          onClick={() => setReviewMode((current) => !current)}
-        >
-          {formatNounCount(pendingReviewEvents.length, 'мероприятие ожидает', 'мероприятия ожидают', 'мероприятий ожидают')} вашего отзыва
-          <Typography component="span" variant="caption" ml={1}>{reviewMode ? 'Показать все' : ''}</Typography>
-        </Button>
-      )}
-      {reviewMode && pendingReviewEvents.length === 0 && <Alert severity="info">Мероприятий, ожидающих отзыва, нет.</Alert>}
+      {!isLoading && !error && activeEvents.length === 0 && <Alert severity="info">Активных мероприятий пока нет.</Alert>}
+      <Tabs value={selectedTab} onChange={(_, value: number) => setSelectedTab(value)} aria-label="Разделы мероприятий">
+        <Tab label="Мероприятия" />
+        <Tab label="Отзывы" />
+      </Tabs>
+      {selectedTab === 1 && reviewEvents.length === 0 && <Alert severity="info">Отзывов пока нет. После завершения посещённого мероприятия он появится здесь.</Alert>}
       <Box className="campus-event-list">
-        {visibleEvents.map((event) => (
-          <EventCard key={event.id} eventId={event.id} reviewExpanded={reviewMode && canStudentReview(event, studentId, studentName)} />
+        {(selectedTab === 0 ? activeEvents : reviewEvents).map((event) => (
+          <EventCard
+            key={event.id}
+            eventId={event.id}
+            reviewExpanded={selectedTab === 1 && canStudentReview(event, studentId, studentName)}
+            showReview={selectedTab === 1}
+          />
         ))}
-        {visibleEvents.length === 0 && reviewMode && <Typography color="text.secondary">Нет мероприятий для отображения.</Typography>}
       </Box>
     </Box>
   );
@@ -316,13 +434,11 @@ export function EventsPage() {
 export function GroupConfirmationPage() {
   const {
     groupConfirmations,
-    myGroupConfirmation,
     decideGroupConfirmation,
-    requestGroupConfirmation,
     isGroupLeader,
     error: workflowError,
   } = useCampusWorkflow();
-  const { currentUser } = useAuth();
+  const { currentUser, profileError, profileLoading, session } = useAuth();
   const ownGroup = currentUser?.groupName ?? '';
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -330,6 +446,13 @@ export function GroupConfirmationPage() {
   const ownGroupConfirmations = groupConfirmations.filter((item) => item.group === ownGroup);
   const pending = ownGroupConfirmations.filter((item) => item.status === 'pending');
   const processed = ownGroupConfirmations.filter((item) => item.status !== 'pending');
+
+  if (!isGroupLeader) {
+    if (session && !currentUser && (profileLoading || !profileError)) {
+      return <Box className="campus-page" display="flex" justifyContent="center" p={4}><CircularProgress /></Box>;
+    }
+    return <Navigate to="/student" replace />;
+  }
 
   async function decide(id: string, approve: boolean) {
     if (actionLock.current || busyId) return;
@@ -346,94 +469,59 @@ export function GroupConfirmationPage() {
     }
   }
 
-  async function submitGroupConfirmation() {
-    if (actionLock.current || busyId) return;
-    actionLock.current = true;
-    setBusyId('self');
-    setError('');
-    try {
-      await requestGroupConfirmation();
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Не удалось отправить заявку.');
-    } finally {
-      actionLock.current = false;
-      setBusyId(null);
-    }
-  }
-
   return (
     <Box className="campus-page">
-      <PageHeader title={isGroupLeader ? 'Заявки студентов группы' : 'Подтверждение группы'}>
+      <PageHeader title="Заявки студентов группы">
         <Typography color="text.secondary">
-          {isGroupLeader ? 'Проверяйте и подтверждайте заявки студентов своей группы' : 'Подтвердите старосте, что вы состоите в своей учебной группе'}
+          Проверяйте и подтверждайте заявки студентов своей группы
         </Typography>
       </PageHeader>
       {workflowError && <Alert severity="error">{workflowError}</Alert>}
       {error && <Alert severity="error">{error}</Alert>}
-      {!isGroupLeader && (
-        <SectionCard title="Моя заявка" icon={<GroupsRoundedIcon />}>
-          <Stack spacing={1.5} alignItems="flex-start">
-            <Typography color="text.secondary">
-              {myGroupConfirmation
-                ? `Последняя заявка: ${myGroupConfirmation.status === 'pending' ? 'ожидает решения' : myGroupConfirmation.status === 'approved' ? 'подтверждена' : 'отклонена'} · ${formatDate(myGroupConfirmation.submittedAt)}`
-                : 'Заявка старосте ещё не отправлена.'}
-            </Typography>
-            {myGroupConfirmation?.status !== 'approved' && myGroupConfirmation?.status !== 'pending' && (
-              <Button variant="contained" disabled={busyId !== null} onClick={() => void submitGroupConfirmation()}>
-                {busyId === 'self' ? <CircularProgress size={18} color="inherit" /> : 'Отправить заявку старосте'}
-              </Button>
-            )}
+      <Card className="group-leader-summary">
+        <CardContent>
+          <Box><Typography variant="overline">ВАША ГРУППА</Typography><Typography variant="h5" fontWeight={750}>{ownGroup || '—'}</Typography></Box>
+          <Box><Typography variant="overline">ОЖИДАЮТ</Typography><Typography variant="h5" fontWeight={750}>{pending.length}</Typography></Box>
+          <Box><Typography variant="overline">ОБРАБОТАНО</Typography><Typography variant="h5" fontWeight={750}>{processed.length}</Typography></Box>
+        </CardContent>
+      </Card>
+      <SectionCard title="Требуют решения" icon={<GroupsRoundedIcon />}>
+        {pending.length === 0 ? <Typography color="text.secondary">Новых заявок нет. Здесь появятся заявки студентов вашей группы.</Typography> : (
+          <Stack spacing={1.5}>
+            {pending.map((request) => (
+              <Card className="group-leader-request" key={request.id} variant="outlined">
+                <CardContent>
+                  <Box className="group-leader-request-info">
+                    <Avatar className="group-leader-student-avatar">{request.studentName.split(' ').map((part) => part[0]).slice(0, 2).join('')}</Avatar>
+                    <Box>
+                      <Typography fontWeight={750}>{request.studentName}</Typography>
+                      <Typography variant="body2" color="text.secondary">{request.email}</Typography>
+                      <Typography variant="caption" color="text.secondary">Подана {formatDate(request.submittedAt)}</Typography>
+                    </Box>
+                  </Box>
+                  <Stack direction={{ xs: 'column-reverse', sm: 'row' }} spacing={1} className="group-leader-actions">
+                    <Button variant="outlined" color="inherit" disabled={busyId !== null} onClick={() => void decide(request.id, false)}>Отклонить</Button>
+                    <Button variant="contained" disabled={busyId !== null} startIcon={busyId === request.id ? <CircularProgress size={16} color="inherit" /> : <CheckRoundedIcon />} onClick={() => void decide(request.id, true)}>
+                      Подтвердить студента
+                    </Button>
+                  </Stack>
+                </CardContent>
+              </Card>
+            ))}
+          </Stack>
+        )}
+      </SectionCard>
+      {processed.length > 0 && (
+        <SectionCard title="История решений" icon={<CheckRoundedIcon />}>
+          <Stack spacing={1}>
+            {processed.map((request) => (
+              <Box className="group-leader-history-row" key={request.id}>
+                <Box><Typography fontWeight={650}>{request.studentName}</Typography><Typography variant="caption" color="text.secondary">{request.email} · {formatDate(request.submittedAt)}</Typography></Box>
+                <Chip size="small" label={request.status === 'approved' ? 'Подтверждён' : 'Отклонён'} color={request.status === 'approved' ? 'success' : 'default'} />
+              </Box>
+            ))}
           </Stack>
         </SectionCard>
-      )}
-      {isGroupLeader && (
-        <>
-          <Card className="group-leader-summary">
-            <CardContent>
-              <Box><Typography variant="overline">ВАША ГРУППА</Typography><Typography variant="h5" fontWeight={750}>{ownGroup || '—'}</Typography></Box>
-              <Box><Typography variant="overline">ОЖИДАЮТ</Typography><Typography variant="h5" fontWeight={750}>{pending.length}</Typography></Box>
-              <Box><Typography variant="overline">ОБРАБОТАНО</Typography><Typography variant="h5" fontWeight={750}>{processed.length}</Typography></Box>
-            </CardContent>
-          </Card>
-          <SectionCard title="Требуют решения" icon={<GroupsRoundedIcon />}>
-            {pending.length === 0 ? <Typography color="text.secondary">Новых заявок нет. Здесь появятся заявки студентов вашей группы.</Typography> : (
-              <Stack spacing={1.5}>
-                {pending.map((request) => (
-                  <Card className="group-leader-request" key={request.id} variant="outlined">
-                    <CardContent>
-                      <Box className="group-leader-request-info">
-                        <Avatar className="group-leader-student-avatar">{request.studentName.split(' ').map((part) => part[0]).slice(0, 2).join('')}</Avatar>
-                        <Box>
-                          <Typography fontWeight={750}>{request.studentName}</Typography>
-                          <Typography variant="body2" color="text.secondary">{request.email}</Typography>
-                          <Typography variant="caption" color="text.secondary">Подана {formatDate(request.submittedAt)}</Typography>
-                        </Box>
-                      </Box>
-                      <Stack direction={{ xs: 'column-reverse', sm: 'row' }} spacing={1} className="group-leader-actions">
-                        <Button variant="outlined" color="inherit" disabled={busyId !== null} onClick={() => void decide(request.id, false)}>Отклонить</Button>
-                        <Button variant="contained" disabled={busyId !== null} startIcon={busyId === request.id ? <CircularProgress size={16} color="inherit" /> : <CheckRoundedIcon />} onClick={() => void decide(request.id, true)}>
-                          Подтвердить студента
-                        </Button>
-                      </Stack>
-                    </CardContent>
-                  </Card>
-                ))}
-              </Stack>
-            )}
-          </SectionCard>
-          {processed.length > 0 && (
-            <SectionCard title="История решений" icon={<CheckRoundedIcon />}>
-              <Stack spacing={1}>
-                {processed.map((request) => (
-                  <Box className="group-leader-history-row" key={request.id}>
-                    <Box><Typography fontWeight={650}>{request.studentName}</Typography><Typography variant="caption" color="text.secondary">{request.email} · {formatDate(request.submittedAt)}</Typography></Box>
-                    <Chip size="small" label={request.status === 'approved' ? 'Подтверждён' : 'Отклонён'} color={request.status === 'approved' ? 'success' : 'default'} />
-                  </Box>
-                ))}
-              </Stack>
-            </SectionCard>
-          )}
-        </>
       )}
     </Box>
   );
@@ -583,6 +671,9 @@ export function EventManagementPage() {
   const ownedEvents = events.filter((event) => event.creatorId === currentUser?.id);
   const groupEvents = events.filter((event) => event.format === 'group' && Date.parse(event.date) > Date.now());
   const creatorAwards = activityAwards.filter((award) => award.awardedById === currentUser?.id);
+  const pendingReviews = ownedEvents.flatMap((event) => event.reviews
+    .filter((review) => review.status === 'pending')
+    .map((review) => ({ event, review })));
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('Обучение');
@@ -596,6 +687,7 @@ export function EventManagementPage() {
   const [maxPoints, setMaxPoints] = useState('50');
   const [selectedGroups, setSelectedGroups] = useState<Record<string, string>>({});
   const [activityPercentages, setActivityPercentages] = useState<Record<string, string>>({});
+  const [managementTab, setManagementTab] = useState(0);
   const [isCreating, setIsCreating] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -706,6 +798,11 @@ export function EventManagementPage() {
       {error && <Alert severity="error">{error}</Alert>}
       {workflowError && <Alert severity="error">{workflowError}</Alert>}
       {success && <Alert severity="success">{success}</Alert>}
+      <Tabs value={managementTab} onChange={(_, value: number) => setManagementTab(value)} aria-label="Разделы мероприятий">
+        <Tab label="Мероприятия" />
+        <Tab label="Отзывы" />
+      </Tabs>
+      {managementTab === 0 && <>
       <SectionCard title="Создать мероприятие" icon={<EventAvailableRoundedIcon />}>
         <Box component="form" onSubmit={handleCreate} className="campus-form">
           <TextField label="Название" value={title} onChange={(event) => setTitle(event.target.value)} required fullWidth />
@@ -727,7 +824,7 @@ export function EventManagementPage() {
               <MenuItem value="БОА">БОА · общественная активность</MenuItem>
               <MenuItem value="БУА">БУА · учебная активность</MenuItem>
             </TextField>
-            <TextField label="Баллы при 100% активности" type="number" value={maxPoints} onChange={(event) => setMaxPoints(event.target.value)} inputProps={{ min: 0, max: 100, step: 1 }} helperText="Максимум за мероприятие; начисление участнику рассчитывается по указанному проценту активности" required fullWidth />
+            <TextField label="Баллы при 100% активности" type="number" value={maxPoints} onChange={(event) => setMaxPoints(event.target.value)} inputProps={{ min: 0, step: 1 }} helperText="Начисление участнику рассчитывается по его проценту активности" required fullWidth />
           </Box>
           <Button type="submit" variant="contained" disabled={isCreating} startIcon={isCreating ? <CircularProgress size={18} color="inherit" /> : <EventAvailableRoundedIcon />}>
             {isCreating ? 'Создаём…' : 'Создать мероприятие'}
@@ -829,21 +926,6 @@ export function EventManagementPage() {
                         </Box>
                       );
                     })}
-                    {event.reviews.filter((review) => review.status === 'pending').map((review) => {
-                      const reviewActionKey = `review:${event.id}:${review.id}`;
-                      return (
-                        <Box className="event-review-moderation" key={review.id}>
-                          <Typography fontWeight={650}>{review.studentName} · оценка {review.rating}/5</Typography>
-                          <Typography variant="body2" color="text.secondary">{review.comment}</Typography>
-                          <Stack direction="row" flexWrap="wrap" gap={1} mt={1}>
-                            <Button size="small" variant="contained" disabled={busyAction !== null} onClick={() => void handleReviewModeration(event, review.id, true)}>
-                              {busyAction === reviewActionKey ? <CircularProgress size={16} color="inherit" /> : 'Одобрить · +5'}
-                            </Button>
-                            <Button size="small" variant="outlined" color="inherit" disabled={busyAction !== null} onClick={() => void handleReviewModeration(event, review.id, false)}>Отклонить</Button>
-                          </Stack>
-                        </Box>
-                      );
-                    })}
                   </Stack>
                 )}
               </Box>
@@ -861,6 +943,38 @@ export function EventManagementPage() {
               </Stack>
             ))}
           </Stack>
+        </SectionCard>
+      )}
+      </>}
+      {managementTab === 1 && (
+        <SectionCard title="Отзывы на модерации" icon={<RateReviewRoundedIcon />}>
+          {pendingReviews.length === 0 ? <Typography color="text.secondary">Новых отзывов нет.</Typography> : (
+            <Stack spacing={1.5}>
+              {pendingReviews.map(({ event, review }) => {
+                const reviewActionKey = `review:${event.id}:${review.id}`;
+                return (
+                  <Box className="event-review-moderation" key={`${event.id}:${review.id}`}>
+                    <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" gap={1}>
+                      <Box>
+                        <Typography fontWeight={700}>{review.studentName} · оценка {review.rating}/5</Typography>
+                        <Typography variant="caption" color="text.secondary">{event.title} · {formatDate(event.endsAt)}</Typography>
+                      </Box>
+                      <Chip size="small" label="Ожидает проверки" />
+                    </Stack>
+                    <Typography variant="body2" mt={1}>{review.comment}</Typography>
+                    <Stack direction="row" flexWrap="wrap" gap={1} mt={1}>
+                      <Button size="small" variant="contained" disabled={busyAction !== null} onClick={() => void handleReviewModeration(event, review.id, true)}>
+                        {busyAction === reviewActionKey ? <CircularProgress size={16} color="inherit" /> : 'Одобрить · +5'}
+                      </Button>
+                      <Button size="small" variant="outlined" color="inherit" disabled={busyAction !== null} onClick={() => void handleReviewModeration(event, review.id, false)}>
+                        Отклонить
+                      </Button>
+                    </Stack>
+                  </Box>
+                );
+              })}
+            </Stack>
+          )}
         </SectionCard>
       )}
     </Box>
@@ -912,11 +1026,15 @@ function InventoryCard({ item, onOpen, isOpening, canAfford, showRewards, onTogg
   showRewards: boolean;
   onToggleRewards: () => void;
 }) {
-  const { caseOpeningPrice, campusCaseRewards } = useCampusWorkflow();
+  const { campusCases } = useCampusWorkflow();
+  const campusCase = campusCases.find((entry) => entry.id === item.caseId);
+  const caseRewards = campusCase?.rewards ?? [];
   return (
     <Card className="inventory-item">
       <CardContent>
-        <Avatar className={`inventory-item-icon${item.kind === 'case' ? ' inventory-case-icon' : ''}`}><CardGiftcardRoundedIcon /></Avatar>
+        <Avatar className={`inventory-item-icon${item.kind === 'case' ? ' inventory-case-icon' : ''}`}>
+          <AuthenticatedImage src={campusCase?.imageUrl} alt={item.name} className="inventory-item-image" fallback={<CardGiftcardRoundedIcon />} />
+        </Avatar>
         <Chip size="small" label="Кейс" className="rarity-chip subtle-chip" />
         <Typography fontWeight={700} mt={1}>{item.name}</Typography>
         <Typography variant="caption" color="text.secondary">{item.source}</Typography>
@@ -924,14 +1042,14 @@ function InventoryCard({ item, onOpen, isOpening, canAfford, showRewards, onTogg
           {showRewards ? 'Скрыть награды' : 'Показать награды'}
         </Button>
         <Button fullWidth variant="contained" disabled={isOpening || !canAfford} onClick={() => onOpen(item)}>
-          {isOpening ? <CircularProgress size={18} color="inherit" /> : caseOpeningPrice === null ? 'Открытие недоступно' : `Открыть · ${caseOpeningPrice} жетонов`}
+          {isOpening ? <CircularProgress size={18} color="inherit" /> : campusCase ? `Открыть · ${campusCase.price} жетонов` : 'Открытие недоступно'}
         </Button>
-        {!canAfford && caseOpeningPrice !== null && <Typography variant="caption" color="error">Недостаточно жетонов</Typography>}
+        {!canAfford && campusCase && <Typography variant="caption" color="error">Недостаточно жетонов</Typography>}
         {showRewards && (
           <Box className="case-reward-list">
             <Typography variant="subtitle2" fontWeight={750}>Содержимое кейса</Typography>
-            {campusCaseRewards.length === 0 && <Typography variant="body2" color="text.secondary">Состав кейса не загружен.</Typography>}
-            {campusCaseRewards.map((reward) => (
+            {caseRewards.length === 0 && <Typography variant="body2" color="text.secondary">В кейсе пока нет наград.</Typography>}
+            {caseRewards.map((reward) => (
               <Box className="case-reward-row" key={reward.name}>
                 <Box sx={{ minWidth: 0 }}>
                   <Typography variant="body2" fontWeight={650}>{reward.name}</Typography>
@@ -948,7 +1066,7 @@ function InventoryCard({ item, onOpen, isOpening, canAfford, showRewards, onTogg
 }
 
 export function BattlePassPage() {
-  const { academicRating, passExperience, premiumPassOwned, premiumPassPrice, passRewards, claimPassReward, purchasePremiumPass, walletBalance, error: workflowError } = useCampusWorkflow();
+  const { academicRating, passExperience, premiumPassOwned, premiumPassPrice, passSeasonName, passStartsAt, passEndsAt, passRewards, claimPassReward, purchasePremiumPass, walletBalance, error: workflowError } = useCampusWorkflow();
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState('');
   const actionLock = useRef(false);
@@ -1010,9 +1128,14 @@ export function BattlePassPage() {
         <CardContent>
           <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} gap={2}>
             <Box>
-              <Typography variant="overline">ПТУ-ПАСС</Typography>
+              <Typography variant="overline">{passSeasonName ?? 'ПТУ-ПАСС'}</Typography>
               <Typography variant="h3" className="battle-pass-level-title" fontWeight={750}>{currentLevel === null ? 'Уровень —' : `Уровень ${currentLevel} / 50`}</Typography>
-              <Typography>{currentLevel === null ? 'Прогресс будет отображён после подключения сервиса ПТУ-пасса.' : currentLevel >= 50 ? 'Максимальный уровень сезона' : `Ещё ${needed} АР до следующего уровня`}</Typography>
+              <Typography>{currentLevel === null ? 'Ваш прогресс появится здесь.' : currentLevel >= 50 ? 'Максимальный уровень сезона' : `Ещё ${needed} АР до следующего уровня`}</Typography>
+              {passStartsAt && passEndsAt && <Typography variant="caption" color="text.secondary">
+                Сезон: {new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium' }).format(new Date(passStartsAt))}
+                {' — '}
+                {new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium' }).format(new Date(passEndsAt))}
+              </Typography>}
             </Box>
             <Box className="battle-pass-progress">
               <Stack direction="row" justifyContent="space-between"><Typography variant="caption">Академический рейтинг</Typography><Typography variant="caption">{academicRating === null ? '—' : `${academicRating} АР`} · {progressInLevel ?? '—'} / 20</Typography></Stack>
@@ -1064,6 +1187,14 @@ export function BattlePassPage() {
                     <Box className={`battle-pass-reward battle-pass-reward-${track}${reward ? '' : ' battle-pass-reward-empty'}`} key={track}>
                       {reward && (
                         <>
+                          <Avatar className="battle-pass-reward-icon">
+                            <AuthenticatedImage
+                              src={reward.imageUrl ?? undefined}
+                              alt={reward.title}
+                              className="battle-pass-reward-image"
+                              fallback={reward.rewardKind === 'case' ? <CardGiftcardRoundedIcon /> : <WorkspacePremiumRoundedIcon />}
+                            />
+                          </Avatar>
                           <Typography className="battle-pass-reward-title" variant="caption" title={reward.title}>{reward.title}</Typography>
                           {reward.claimed ? <Chip size="small" label="Получено" color="success" /> :
                             reward.level <= (currentLevel ?? 0) && (track === 'free' || premiumPassOwned === true) ? (
@@ -1088,21 +1219,61 @@ export function BattlePassPage() {
 }
 
 export function InventoryPage() {
-  const { inventory, openCase, walletBalance, caseOpeningPrice, error: workflowError } = useCampusWorkflow();
+  const { inventory, openCase, walletBalance, error: workflowError, campusCases } = useCampusWorkflow();
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [openedItem, setOpenedItem] = useState<InventoryItem | null>(null);
+  const [inventoryTab, setInventoryTab] = useState<'cases' | 'items'>('cases');
+  const [reel, setReel] = useState<Array<{ label: string; rarity: string; winner: boolean }>>([]);
+  const [reelOffset, setReelOffset] = useState(0);
+  const [revealComplete, setRevealComplete] = useState(false);
   const [error, setError] = useState('');
   const actionLock = useRef(false);
+  const reelWindow = useRef<HTMLDivElement>(null);
+  const winnerIndex = 28;
+
+  useEffect(() => {
+    if (!openedItem || reel.length === 0) return;
+    const frame = requestAnimationFrame(() => {
+      const visibleWidth = reelWindow.current?.clientWidth ?? 320;
+      setReelOffset(winnerIndex * 148 + 68 - visibleWidth / 2);
+    });
+    const timer = window.setTimeout(() => setRevealComplete(true), 3400);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [openedItem, reel.length]);
 
   async function handleOpenCase(item: InventoryItem) {
     if (actionLock.current) return;
     actionLock.current = true;
     setOpeningId(item.id);
     setOpenedItem(null);
+    setReel([]);
+    setReelOffset(0);
+    setRevealComplete(false);
     setError('');
     try {
       const reward = await openCase(item.id);
+      const rewards = campusCases.find((entry) => entry.id === item.caseId)?.rewards ?? [];
+      const filler = Array.from({ length: winnerIndex }, () => {
+        const candidate = rewards[Math.floor(Math.random() * rewards.length)];
+        return {
+          label: candidate?.name ?? 'Награда',
+          rarity: candidate?.rarity ?? 'Обычный',
+          winner: false,
+        };
+      });
+      setReel([
+        ...filler.map(({ label, rarity, winner }) => ({ label, rarity, winner })),
+        { label: reward.name, rarity: reward.rarity ?? 'Обычный', winner: true },
+        ...Array.from({ length: 5 }, (_, index) => ({
+          label: rewards[index % Math.max(rewards.length, 1)]?.name ?? 'Награда',
+          rarity: rewards[index % Math.max(rewards.length, 1)]?.rarity ?? 'Обычный',
+          winner: false,
+        })),
+      ]);
       setOpenedItem(reward);
     } catch (openError) {
       setError(openError instanceof Error ? openError.message : 'Не удалось открыть кейс.');
@@ -1115,36 +1286,81 @@ export function InventoryPage() {
   return (
     <Box className="campus-page">
       <PageHeader title="Инвентарь">
-        <Typography color="text.secondary">{formatNounCount(inventory.filter((item) => item.kind === 'case').length, 'кейс', 'кейса', 'кейсов')} · {walletBalance?.toLocaleString('ru-RU') ?? '—'} жетонов</Typography>
+        <Typography color="text.secondary">{formatNounCount(inventory.filter((item) => item.kind === 'case').length, 'кейс', 'кейса', 'кейсов')} · {formatNounCount(inventory.filter((item) => item.kind === 'cosmetic').length, 'предмет', 'предмета', 'предметов')} · {walletBalance?.toLocaleString('ru-RU') ?? '—'} жетонов</Typography>
       </PageHeader>
+      <Tabs value={inventoryTab} onChange={(_, value: 'cases' | 'items') => setInventoryTab(value)} aria-label="Раздел инвентаря">
+        <Tab value="cases" label={`Кейсы (${inventory.filter((item) => item.kind === 'case').length})`} />
+        <Tab value="items" label={`Предметы (${inventory.filter((item) => item.kind === 'cosmetic').length})`} />
+      </Tabs>
       {error && <Alert severity="error">{error}</Alert>}
       {workflowError && <Alert severity="error">{workflowError}</Alert>}
-      {walletBalance === null && <Alert severity="info">Баланс пока недоступен.</Alert>}
-      {inventory.filter((item) => item.kind === 'case').length === 0 ? (
+      {inventoryTab === 'cases' && walletBalance === null && <Alert severity="info">Баланс пока недоступен.</Alert>}
+      {inventoryTab === 'cases' && inventory.filter((item) => item.kind === 'case').length === 0 ? (
         <SectionCard title="Пока пусто" icon={<CardGiftcardRoundedIcon />}>
           <Typography color="text.secondary">Кейсы не загружены.</Typography>
         </SectionCard>
-      ) : <Box className="inventory-grid">{inventory.filter((item) => item.kind === 'case').map((item) => (
+      ) : inventoryTab === 'cases' ? <Box className="inventory-grid">{inventory.filter((item) => item.kind === 'case').map((item) => {
+        const caseInfo = campusCases.find((entry) => entry.id === item.caseId);
+        const canAfford = walletBalance !== null && caseInfo !== undefined && walletBalance >= caseInfo.price;
+        return (
         <InventoryCard
           key={item.id}
           item={item}
           onOpen={handleOpenCase}
           isOpening={openingId === item.id}
-          canAfford={walletBalance !== null && caseOpeningPrice !== null && walletBalance >= caseOpeningPrice}
+          canAfford={canAfford}
           showRewards={selectedCaseId === item.id}
           onToggleRewards={() => setSelectedCaseId((current) => current === item.id ? null : item.id)}
         />
-      ))}</Box>}
-      {openedItem && (
-        <Card className="case-result-card" role="status" aria-live="polite">
-          <Avatar className="case-result-icon"><CardGiftcardRoundedIcon /></Avatar>
-          <Box>
-            <Typography variant="overline">ПРЕДМЕТ ДОБАВЛЕН В ИНВЕНТАРЬ</Typography>
-            <Typography variant="h6" fontWeight={750}>{openedItem.name}</Typography>
-            <Typography color="text.secondary">{openedItem.rarity} · {openedItem.source}</Typography>
-          </Box>
+      );})}</Box> : inventory.filter((item) => item.kind === 'cosmetic').length === 0 ? (
+        <SectionCard title="Пока пусто" icon={<WorkspacePremiumRoundedIcon />}>
+          <Typography color="text.secondary">Полученные награды появятся здесь. Их можно выбрать в настройках профиля.</Typography>
+        </SectionCard>
+      ) : <Box className="inventory-grid">{inventory.filter((item) => item.kind === 'cosmetic').map((item) => (
+        <Card className="inventory-item" key={item.id}>
+          <CardContent>
+            <Avatar className="inventory-item-icon">
+              <AuthenticatedImage src={item.imageUrl} alt={item.name} className="inventory-item-image" fallback={<WorkspacePremiumRoundedIcon />} />
+            </Avatar>
+            <Chip size="small" label={item.rarity ?? 'Награда'} className={`rarity-chip rarity-${item.rarity === 'Эпический' ? 'epic' : item.rarity === 'Редкий' ? 'rare' : 'common'}`} />
+            <Typography fontWeight={700} mt={1}>{item.name}</Typography>
+            <Typography variant="caption" color="text.secondary">{item.cosmeticType === 'avatar' ? 'Аватар' : item.cosmeticType === 'avatar-frame' ? 'Рамка профиля' : item.cosmeticType === 'profile-background' ? 'Фон профиля' : 'Значок'}</Typography>
+            <Typography variant="caption" display="block" color="text.secondary">{item.source}</Typography>
+          </CardContent>
         </Card>
-      )}
+      ))}</Box>}
+      <Dialog open={openedItem !== null} onClose={() => revealComplete && setOpenedItem(null)} maxWidth="md" fullWidth>
+        <DialogTitle>Открытие кейса</DialogTitle>
+        <DialogContent>
+          <Box className="case-reel-window" ref={reelWindow}>
+            <Box className={`case-reel-track${revealComplete ? ' case-reel-settled' : ''}`} style={{ transform: `translateX(-${reelOffset}px)` }}>
+              {reel.map((entry, index) => (
+                <Box className={`case-reel-item${entry.winner && revealComplete ? ' case-reel-winner' : ''}`} key={`${index}-${entry.label}`}>
+                  <Avatar className="case-reel-icon"><CardGiftcardRoundedIcon /></Avatar>
+                  <Typography variant="caption" fontWeight={650}>{entry.label}</Typography>
+                  <Typography variant="caption" color="text.secondary">{entry.rarity}</Typography>
+                </Box>
+              ))}
+            </Box>
+            <Box className="case-reel-marker" />
+          </Box>
+          {revealComplete && openedItem && (
+            <Box className="case-reveal-result">
+              <Avatar className="case-result-icon">
+                <AuthenticatedImage src={openedItem.imageUrl} alt={openedItem.name} className="inventory-item-image" fallback={<WorkspacePremiumRoundedIcon />} />
+              </Avatar>
+              <Box>
+                <Typography variant="overline">НАГРАДА ДОБАВЛЕНА В ИНВЕНТАРЬ</Typography>
+                <Typography variant="h6" fontWeight={750}>{openedItem.name}</Typography>
+                <Typography color="text.secondary">{openedItem.rarity} · {openedItem.source}</Typography>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button disabled={!revealComplete} onClick={() => setOpenedItem(null)}>Готово</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
@@ -1156,9 +1372,15 @@ export function CertificateManagementPage() {
   const [loading, setLoading] = useState(true);
   const [rejectionTarget, setRejectionTarget] = useState<CertificateRequestView | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [selectedSection, setSelectedSection] = useState(0);
   const actionLock = useRef(false);
-  const pendingRequests = certificateRequests.filter((request) => request.status === 'PENDING');
-  const completedRequests = certificateRequests.filter((request) => request.status !== 'PENDING');
+  const requestSections = [
+    certificateRequests.filter((request) => request.status === 'PENDING'),
+    certificateRequests.filter((request) => request.status === 'IN_PROGRESS'),
+    certificateRequests.filter((request) => request.status === 'READY' || request.status === 'APPROVED'),
+    certificateRequests.filter((request) => request.status === 'ISSUED' || request.status === 'REJECTED'),
+  ];
+  const sectionTitles = ['Новые', 'В работе', 'Ожидают выдачи', 'История'];
 
   useEffect(() => {
     let active = true;
@@ -1173,7 +1395,11 @@ export function CertificateManagementPage() {
     return () => { active = false; };
   }, []);
 
-  async function handleStatusUpdate(request: CertificateRequestView, status: Exclude<CertificateStatus, 'PENDING'>, reason?: string) {
+  async function handleStatusUpdate(
+    request: CertificateRequestView,
+    status: Exclude<CertificateStatus, 'PENDING' | 'APPROVED'>,
+    reason?: string,
+  ) {
     if (actionLock.current) return;
     actionLock.current = true;
     setBusyId(request.id);
@@ -1227,12 +1453,16 @@ export function CertificateManagementPage() {
         <CardContent>
           <Box className="office-request-heading">
             <Box>
-              <Typography variant="h6" fontSize={16} fontWeight={750}>{certificateTypeLabels[request.type]}</Typography>
+              <Typography variant="h6" fontSize={16} fontWeight={750}>{certificateTitle(request)}</Typography>
               <Typography variant="body2" color="text.secondary">{request.studentName}</Typography>
             </Box>
             <Chip size="small" label={certificateStatusLabels[request.status]} className={`certificate-status certificate-status-${request.status}`} />
           </Box>
           <Typography variant="caption" color="text.secondary">Подана {formatDate(request.createdAt)}</Typography>
+          <Typography variant="body2" mt={1}>{request.description || 'Дополнительных пояснений нет.'}</Typography>
+          <Typography variant="caption" color="text.secondary">
+            Получение: {request.deliveryMethod === 'DIGITAL' ? 'электронный файл' : 'в учебной части'}
+          </Typography>
           {request.rejectionReason && <Typography className="office-request-comment">{request.rejectionReason}</Typography>}
           {request.documentAvailable && request.documentName && (
             <Button
@@ -1242,7 +1472,7 @@ export function CertificateManagementPage() {
               Скачать {request.documentName}
             </Button>
           )}
-          {request.status !== 'REJECTED' && (
+          {request.status !== 'REJECTED' && request.status !== 'ISSUED' && (
             <Stack direction={{ xs: 'column', sm: 'row' }} gap={1} className="office-request-actions">
               <Button component="label" variant="outlined" disabled={busyId !== null}>
                 {busyId === request.id ? <CircularProgress size={18} /> : request.documentAvailable ? 'Заменить PDF справки' : 'Загрузить PDF справки'}
@@ -1260,13 +1490,23 @@ export function CertificateManagementPage() {
               </Button>
               {request.status === 'PENDING' && (
                 <>
-                  <Button variant="contained" color="primary" disabled={busyId !== null} onClick={() => void handleStatusUpdate(request, 'APPROVED')}>
-                    {busyId === request.id ? <CircularProgress size={18} color="inherit" /> : 'Одобрить'}
+                  <Button variant="contained" color="primary" disabled={busyId !== null} onClick={() => void handleStatusUpdate(request, 'IN_PROGRESS')}>
+                    {busyId === request.id ? <CircularProgress size={18} color="inherit" /> : 'Взять в работу'}
                   </Button>
                   <Button variant="outlined" color="error" disabled={busyId !== null} onClick={() => { setRejectionTarget(request); setRejectionReason(''); }}>
                     Отклонить
                   </Button>
                 </>
+              )}
+              {request.status === 'IN_PROGRESS' && (
+                <Button variant="contained" color="primary" disabled={busyId !== null || !request.documentAvailable} onClick={() => void handleStatusUpdate(request, 'READY')}>
+                  Отметить «Ожидает выдачи»
+                </Button>
+              )}
+              {(request.status === 'READY' || request.status === 'APPROVED') && (
+                <Button variant="contained" color="success" disabled={busyId !== null} onClick={() => void handleStatusUpdate(request, 'ISSUED')}>
+                  Отметить «Выдана»
+                </Button>
               )}
             </Stack>
           )}
@@ -1280,16 +1520,16 @@ export function CertificateManagementPage() {
       <PageHeader title="Заявления на справки">
       </PageHeader>
       <Box className="office-metrics">
-        <Card><CardContent><Typography variant="caption" color="text.secondary">Новые</Typography><Typography variant="h4" fontWeight={750}>{pendingRequests.length}</Typography></CardContent></Card>
-        <Card><CardContent><Typography variant="caption" color="text.secondary">Одобрены</Typography><Typography variant="h4" fontWeight={750}>{certificateRequests.filter((item) => item.status === 'APPROVED').length}</Typography></CardContent></Card>
-        <Card><CardContent><Typography variant="caption" color="text.secondary">Отклонены</Typography><Typography variant="h4" fontWeight={750}>{certificateRequests.filter((item) => item.status === 'REJECTED').length}</Typography></CardContent></Card>
+        {sectionTitles.map((title, index) => <Card key={title}><CardContent><Typography variant="caption" color="text.secondary">{title}</Typography><Typography variant="h4" fontWeight={750}>{requestSections[index].length}</Typography></CardContent></Card>)}
       </Box>
       {error && <Alert severity="error">{error}</Alert>}
-      <SectionCard title="Требуют обработки" icon={<WorkspacePremiumRoundedIcon />}>
-        {loading ? <CircularProgress size={24} /> : pendingRequests.length ? <Stack spacing={1.5}>{pendingRequests.map(renderRequest)}</Stack> : <Typography color="text.secondary">Активных заявок нет.</Typography>}
-      </SectionCard>
-      <SectionCard title="История заявок" icon={<CheckRoundedIcon />}>
-        {completedRequests.length ? <Stack spacing={1.5}>{completedRequests.map(renderRequest)}</Stack> : <Typography color="text.secondary">Завершённых заявок нет.</Typography>}
+      <SectionCard title="Заявления" icon={<WorkspacePremiumRoundedIcon />}>
+        <Tabs value={selectedSection} onChange={(_, value: number) => setSelectedSection(value)} variant="scrollable" scrollButtons="auto" aria-label="Разделы заявлений">
+          {sectionTitles.map((title, index) => <Tab key={title} label={`${title} · ${requestSections[index].length}`} />)}
+        </Tabs>
+        {loading ? <CircularProgress size={24} /> : requestSections[selectedSection].length
+          ? <Stack spacing={1.5} mt={2}>{requestSections[selectedSection].map(renderRequest)}</Stack>
+          : <Typography color="text.secondary" mt={2}>В этом разделе пока нет заявлений.</Typography>}
       </SectionCard>
       <Dialog open={rejectionTarget !== null} onClose={() => { if (!busyId) setRejectionTarget(null); }} fullWidth maxWidth="sm">
         <DialogTitle>Отклонить заявление</DialogTitle>
@@ -1326,6 +1566,15 @@ export function CertificateManagementPage() {
 }
 
 const weekdays = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
+const weekdayAbbreviations: Record<string, string> = {
+  Понедельник: 'Пн',
+  Вторник: 'Вт',
+  Среда: 'Ср',
+  Четверг: 'Чт',
+  Пятница: 'Пт',
+  Суббота: 'Сб',
+  Воскресенье: 'Вс',
+};
 
 interface ScheduleDraft {
   id?: string;
@@ -1333,7 +1582,7 @@ interface ScheduleDraft {
   startTime: string;
   endTime: string;
   groupId: string;
-  subject: string;
+  disciplineId: string;
   teacherId: string;
   room: string;
 }
@@ -1349,8 +1598,13 @@ const defaultPeriods = [
 function ScheduleWeek({ editable }: { editable: boolean }) {
   const { scheduleEntries, campusGroups, saveScheduleEntry, deleteScheduleEntry, updateScheduleTimeSlot, isLoading } = useCampusWorkflow();
   const [teachers, setTeachers] = useState<ManagedTeacher[]>([]);
+  const [disciplines, setDisciplines] = useState<ManagedDiscipline[]>([]);
   const [draft, setDraft] = useState<ScheduleDraft | null>(null);
   const [periodTimes, setPeriodTimes] = useState<Record<string, { startTime: string; endTime: string }>>({});
+  const [periodEditorOpen, setPeriodEditorOpen] = useState(false);
+  const [scheduleMode, setScheduleMode] = useState<'all' | 'group'>('all');
+  const [selectedGroupId, setSelectedGroupId] = useState('');
+  const [selectedMobileDay, setSelectedMobileDay] = useState(weekdays[0]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -1358,17 +1612,42 @@ function ScheduleWeek({ editable }: { editable: boolean }) {
   useEffect(() => {
     if (!editable) return;
     let active = true;
-    void listManagedTeachers()
-      .then((items) => { if (active) setTeachers(items.filter((teacher) => teacher.active)); })
+    void Promise.all([listManagedTeachers(), getAllAcademicDisciplines()])
+      .then(([teacherItems, disciplineItems]) => {
+        if (active) {
+          setTeachers(teacherItems.filter((teacher) => teacher.active));
+          setDisciplines(disciplineItems);
+        }
+      })
       .catch((loadError: unknown) => { if (active) setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить список преподавателей.'); });
     return () => { active = false; };
   }, [editable]);
 
+  useEffect(() => {
+    if (!selectedGroupId && campusGroups.length) setSelectedGroupId(campusGroups[0].id);
+  }, [campusGroups, selectedGroupId]);
+
+  const activeEntries = scheduleMode === 'group' && editable
+    ? scheduleEntries.filter((entry) => entry.groupId === selectedGroupId)
+    : scheduleEntries;
   const periods = Array.from(new Map([
     ...defaultPeriods,
-    ...scheduleEntries.map((entry) => [entry.startTime, entry.endTime]),
+    ...activeEntries.map((entry) => [entry.startTime, entry.endTime]),
   ].map(([start, end]) => [`${start}-${end}`, { startTime: start, endTime: end }])).values())
     .sort((a, b) => a.startTime.localeCompare(b.startTime));
+  const selectedGroup = campusGroups.find((group) => group.id === selectedGroupId);
+
+  function openDraft(weekday: string, startTime = defaultPeriods[0][0], endTime = defaultPeriods[0][1], groupId = '') {
+    setDraft({
+      weekday,
+      startTime,
+      endTime,
+      groupId: groupId || (scheduleMode === 'group' ? selectedGroupId : campusGroups[0]?.id) || '',
+      disciplineId: disciplines[0]?.id ?? '',
+      teacherId: teachers[0]?.id ?? '',
+      room: '',
+    });
+  }
 
   async function submitDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1379,14 +1658,16 @@ function ScheduleWeek({ editable }: { editable: boolean }) {
     try {
       const group = campusGroups.find((item) => item.id === draft.groupId);
       const teacher = teachers.find((item) => item.id === draft.teacherId);
-      if (!group || !teacher) throw new Error('Выберите группу и действующего преподавателя из списка.');
+      const discipline = disciplines.find((item) => item.id === draft.disciplineId);
+      if (!group || !teacher || !discipline) throw new Error('Выберите группу, дисциплину и действующего преподавателя из списка.');
       await saveScheduleEntry({
         weekday: draft.weekday,
         startTime: draft.startTime,
         endTime: draft.endTime,
         groupId: group.id,
         group: group.name,
-        subject: draft.subject.trim(),
+        subject: discipline.name,
+        disciplineId: discipline.id,
         teacherId: teacher.id,
         teacher: teacher.fullName,
         room: draft.room.trim(),
@@ -1445,65 +1726,195 @@ function ScheduleWeek({ editable }: { editable: boolean }) {
     <>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
-      <Box sx={{ overflowX: 'auto', border: 1, borderColor: 'divider', borderRadius: 2 }}>
-        <Box component="table" className="schedule-week-table">
-          <thead>
-            <tr>
-              <th>Время</th>
-              {weekdays.map((day) => <th key={day}>{day}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {periods.map((period) => {
-              const periodKey = `${period.startTime}-${period.endTime}`;
-              const times = periodTimes[periodKey] ?? period;
-              return (
-                <tr key={periodKey}>
-                  <th className="schedule-week-time">
-                    {editable ? (
-                      <Stack spacing={0.75} sx={{ minWidth: 112 }}>
-                        <TextField aria-label={`Начало пары ${period.startTime}`} type="time" size="small" value={times.startTime} onChange={(event) => setPeriodTimes((current) => ({ ...current, [periodKey]: { ...times, startTime: event.target.value } }))} />
-                        <TextField aria-label={`Окончание пары ${period.endTime}`} type="time" size="small" value={times.endTime} onChange={(event) => setPeriodTimes((current) => ({ ...current, [periodKey]: { ...times, endTime: event.target.value } }))} />
-                        {(times.startTime !== period.startTime || times.endTime !== period.endTime) && (
-                          <Button size="small" disabled={busy} onClick={() => void savePeriodTime(period.startTime, period.endTime)}>Для всех дней</Button>
-                        )}
-                      </Stack>
-                    ) : <Typography fontWeight={750}>{period.startTime}–{period.endTime}</Typography>}
-                  </th>
-                  {weekdays.map((day) => {
-                    const entries = scheduleEntries.filter((entry) => entry.weekday === day && entry.startTime === period.startTime && entry.endTime === period.endTime);
-                    return (
-                      <td key={day}>
-                        <Stack spacing={0.75} minWidth={150}>
-                          {entries.map((entry) => (
-                            <Card variant="outlined" key={entry.id} className="schedule-week-lesson">
-                              <CardContent sx={{ p: 1.25, '&:last-child': { pb: 1.25 } }}>
-                                <Typography fontWeight={750} variant="body2">{entry.subject}</Typography>
-                                <Typography variant="caption" color="text.secondary">{entry.group} · {entry.teacher} · {entry.room}</Typography>
-                                {editable && <Stack direction="row" spacing={0.5} mt={0.75}>
-                                  <Button size="small" startIcon={<EditRoundedIcon />} onClick={() => setDraft({ ...entry, teacherId: entry.teacherId ?? '' })}>Изменить</Button>
-                                  <Button size="small" color="error" aria-label={`Отменить ${entry.subject} ${entry.group}`} disabled={busy} onClick={() => void removeEntry(entry)}><DeleteOutlineRoundedIcon /></Button>
-                                </Stack>}
-                              </CardContent>
-                            </Card>
-                          ))}
-                          {editable && (
-                            <Button size="small" startIcon={<AddRoundedIcon />} onClick={() => setDraft({
-                              weekday: day, startTime: period.startTime, endTime: period.endTime,
-                              groupId: campusGroups[0]?.id ?? '', subject: '', teacherId: teachers[0]?.id ?? '', room: '',
-                            })}>Добавить пару</Button>
-                          )}
-                        </Stack>
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
+      {editable && (
+        <Box className="schedule-mode-toolbar">
+          <Tabs
+            value={scheduleMode}
+            onChange={(_, value: 'all' | 'group') => setScheduleMode(value)}
+            aria-label="Режим просмотра расписания"
+            className="schedule-mode-tabs"
+          >
+            <Tab value="all" label="Общее расписание" />
+            <Tab value="group" label="По группам" />
+          </Tabs>
+          {scheduleMode === 'group' && (
+            <FormControl size="small" className="schedule-group-select" disabled={!campusGroups.length}>
+              <InputLabel id="schedule-group-label">Учебная группа</InputLabel>
+              <Select
+                labelId="schedule-group-label"
+                label="Учебная группа"
+                value={selectedGroupId}
+                onChange={(event) => setSelectedGroupId(event.target.value)}
+              >
+                {campusGroups.map((group) => <MenuItem key={group.id} value={group.id}>{group.name}</MenuItem>)}
+              </Select>
+            </FormControl>
+          )}
         </Box>
-      </Box>
-      {scheduleEntries.length === 0 && !isLoading && <Typography color="text.secondary" mt={2}>Расписание пока не заполнено.</Typography>}
+      )}
+      <Box className={`schedule-toolbar${editable && scheduleMode === 'all' ? ' schedule-toolbar-compact' : ''}`}>
+          <Box className="schedule-summary">
+            <Typography variant="body2" fontWeight={700}>
+              {formatNounCount(activeEntries.length, 'занятие', 'занятия', 'занятий')}
+              {(!editable || scheduleMode === 'group') && ' за неделю'}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {scheduleMode === 'group' && editable
+                ? selectedGroup?.name ?? 'Выберите группу'
+                : formatNounCount(new Set(activeEntries.map((entry) => entry.groupId)).size, 'группа', 'группы', 'групп')}
+            </Typography>
+          </Box>
+          {editable && scheduleMode === 'all' && (
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<ScheduleRoundedIcon />}
+              onClick={() => setPeriodEditorOpen((open) => !open)}
+              aria-expanded={periodEditorOpen}
+            >
+              {periodEditorOpen ? 'Скрыть интервалы' : 'Время пар'}
+            </Button>
+          )}
+        </Box>
+        {editable && scheduleMode === 'all' && periodEditorOpen && (
+          <Box className="schedule-period-editor">
+            <Box className="schedule-period-editor-heading">
+              <Typography variant="subtitle1" fontWeight={750}>Время занятий</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Новое время применяется ко всем занятиям с таким интервалом во все дни недели.
+              </Typography>
+            </Box>
+            {periods.filter((period) => activeEntries.some((entry) => entry.startTime === period.startTime
+              && entry.endTime === period.endTime)).length === 0
+              ? <Typography variant="body2" color="text.secondary">Сначала добавьте занятие, чтобы настроить время пары.</Typography>
+              : <Box className="schedule-period-list">
+                {periods.filter((period) => activeEntries.some((entry) => entry.startTime === period.startTime
+                  && entry.endTime === period.endTime)).map((period) => {
+                  const periodKey = `${period.startTime}-${period.endTime}`;
+                  const times = periodTimes[periodKey] ?? period;
+                  return (
+                    <Box className="schedule-period-row" key={periodKey}>
+                      <Typography variant="body2" fontWeight={700}>{period.startTime}–{period.endTime}</Typography>
+                      <Stack direction="row" spacing={1} className="schedule-period-fields">
+                        <TextField
+                          label="Начало"
+                          type="time"
+                          size="small"
+                          value={times.startTime}
+                          onChange={(event) => setPeriodTimes((current) => ({ ...current, [periodKey]: { ...times, startTime: event.target.value } }))}
+                          InputLabelProps={{ shrink: true }}
+                        />
+                        <TextField
+                          label="Окончание"
+                          type="time"
+                          size="small"
+                          value={times.endTime}
+                          onChange={(event) => setPeriodTimes((current) => ({ ...current, [periodKey]: { ...times, endTime: event.target.value } }))}
+                          InputLabelProps={{ shrink: true }}
+                        />
+                      </Stack>
+                      <Button
+                        size="small"
+                        disabled={busy || (times.startTime === period.startTime && times.endTime === period.endTime)}
+                        onClick={() => void savePeriodTime(period.startTime, period.endTime)}
+                      >
+                        Применить
+                      </Button>
+                    </Box>
+                  );
+                })}
+              </Box>}
+          </Box>
+        )}
+        <Box className="schedule-mobile-day-tabs" aria-label="Выберите день">
+          {weekdays.map((day) => (
+            <Button
+              key={day}
+              size="small"
+              variant={selectedMobileDay === day ? 'contained' : 'outlined'}
+              onClick={() => setSelectedMobileDay(day)}
+            >
+              {weekdayAbbreviations[day]}
+            </Button>
+          ))}
+        </Box>
+        <Box className={`schedule-calendar${editable && scheduleMode === 'all' ? ' schedule-calendar-compact' : ''}`}>
+          <Box className="schedule-calendar-head">
+            <Box className="schedule-calendar-corner">ВРЕМЯ</Box>
+            {weekdays.map((day) => (
+              <Box key={day} className={`schedule-calendar-day-heading${day === selectedMobileDay ? ' schedule-calendar-mobile-selected' : ''}`}>
+                <Typography variant="caption" fontWeight={750} className="schedule-calendar-day-label">{day}</Typography>
+                {editable && (
+                  <Button size="small" onClick={() => openDraft(day)} aria-label={`Добавить занятие: ${day}`}>
+                    <AddRoundedIcon fontSize="small" />
+                  </Button>
+                )}
+              </Box>
+            ))}
+          </Box>
+          {periods.map((period) => (
+            <Box className="schedule-calendar-row" key={`${period.startTime}-${period.endTime}`}>
+              <Box className="schedule-calendar-time">
+                <Typography variant="caption" fontWeight={750}>{period.startTime}</Typography>
+                <Typography variant="caption" color="text.secondary">{period.endTime}</Typography>
+              </Box>
+              {weekdays.map((day) => {
+                const entries = activeEntries
+                  .filter((entry) => entry.weekday === day && entry.startTime === period.startTime && entry.endTime === period.endTime)
+                  .sort((a, b) => a.group.localeCompare(b.group) || a.subject.localeCompare(b.subject));
+                return (
+                  <Box
+                    className={`schedule-calendar-cell${day === selectedMobileDay ? ' schedule-calendar-mobile-selected' : ''}${entries.length ? ' schedule-calendar-cell-filled' : ''}`}
+                    key={day}
+                  >
+                    {entries.map((entry) => {
+                      const canEdit = editable;
+                      const concise = editable && scheduleMode === 'all';
+                      return (
+                        <Box className={`schedule-calendar-event${concise ? ' schedule-calendar-event-compact' : ''}`} key={entry.id}>
+                          <Box className="schedule-calendar-event-copy">
+                            <Typography variant="caption" fontWeight={750}>{entry.subject}</Typography>
+                            {concise ? (
+                              <Typography variant="caption">{entry.group} · ауд. {entry.room}</Typography>
+                            ) : (
+                              <>
+                                <Typography variant="caption">{entry.group} · ауд. {entry.room}</Typography>
+                                <Typography variant="caption" color="text.secondary">{entry.teacher}</Typography>
+                              </>
+                            )}
+                          </Box>
+                          {canEdit && (
+                            <Box className="schedule-calendar-event-actions">
+                              <Button
+                                size="small"
+                                aria-label={`Изменить ${entry.subject} ${entry.group}`}
+                                onClick={() => setDraft({ ...entry, disciplineId: entry.disciplineId ?? '', teacherId: entry.teacherId ?? '' })}
+                              ><EditRoundedIcon fontSize="small" /></Button>
+                              <Button
+                                size="small"
+                                color="error"
+                                aria-label={`Отменить ${entry.subject} ${entry.group}`}
+                                disabled={busy}
+                                onClick={() => void removeEntry(entry)}
+                              ><DeleteOutlineRoundedIcon fontSize="small" /></Button>
+                            </Box>
+                          )}
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                );
+              })}
+            </Box>
+          ))}
+        </Box>
+        {activeEntries.length === 0 && !isLoading && (
+          <Alert severity="info" className="schedule-empty-state">
+            {editable && scheduleMode === 'group'
+              ? 'Для этой группы занятий пока нет. Добавьте пару из нужного дня и времени.'
+              : editable ? 'Расписание пока не заполнено. Добавьте первое занятие, чтобы начать.' : 'Расписание пока не заполнено.'}
+          </Alert>
+        )}
       <Dialog open={draft !== null} onClose={() => !busy && setDraft(null)} fullWidth maxWidth="sm">
         <Box component="form" onSubmit={(event) => void submitDraft(event)}>
           <DialogTitle>{draft?.id ? 'Изменить занятие' : 'Добавить занятие'}</DialogTitle>
@@ -1522,13 +1933,18 @@ function ScheduleWeek({ editable }: { editable: boolean }) {
               <TextField select label="Преподаватель" value={draft.teacherId} onChange={(event) => setDraft({ ...draft, teacherId: event.target.value })} required>
                 {teachers.map((teacher) => <MenuItem key={teacher.id} value={teacher.id}>{teacher.fullName}</MenuItem>)}
               </TextField>
-              <TextField label="Дисциплина" value={draft.subject} onChange={(event) => setDraft({ ...draft, subject: event.target.value })} required />
+              <FormControl required disabled={!disciplines.length}>
+                <InputLabel id="schedule-discipline-label">Дисциплина</InputLabel>
+                <Select labelId="schedule-discipline-label" label="Дисциплина" value={draft.disciplineId} onChange={(event) => setDraft({ ...draft, disciplineId: event.target.value })}>
+                  {disciplines.map((discipline) => <MenuItem key={discipline.id} value={discipline.id}>{discipline.departmentName} · {discipline.name}</MenuItem>)}
+                </Select>
+              </FormControl>
               <TextField label="Аудитория" value={draft.room} onChange={(event) => setDraft({ ...draft, room: event.target.value })} required />
             </Stack>}
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setDraft(null)} disabled={busy}>Отмена</Button>
-            <Button type="submit" variant="contained" disabled={busy || !draft || !teachers.length || !campusGroups.length} startIcon={busy ? <CircularProgress size={18} color="inherit" /> : <SaveRoundedIcon />}>Сохранить</Button>
+            <Button type="submit" variant="contained" disabled={busy || !draft || !teachers.length || !campusGroups.length || !disciplines.length} startIcon={busy ? <CircularProgress size={18} color="inherit" /> : <SaveRoundedIcon />}>Сохранить</Button>
           </DialogActions>
         </Box>
       </Dialog>
@@ -1542,8 +1958,21 @@ export function ScheduleManagementPage() {
     <Box className="campus-page">
       <PageHeader title="Расписание занятий" />
       {workflowError && <Alert severity="error">{workflowError}</Alert>}
-      <SectionCard title="Недельная сетка — изменения сохраняются сразу" icon={<CalendarMonthRoundedIcon />}>
+      <SectionCard title="Календарь занятий на неделю" icon={<CalendarMonthRoundedIcon />}>
         <ScheduleWeek editable />
+      </SectionCard>
+    </Box>
+  );
+}
+
+export function TeacherSchedulePage() {
+  const { error: workflowError } = useCampusWorkflow();
+  return (
+    <Box className="campus-page">
+      <PageHeader title="Моё расписание" />
+      {workflowError && <Alert severity="error">{workflowError}</Alert>}
+      <SectionCard title="Занятия моих групп" icon={<ScheduleRoundedIcon />}>
+        <ScheduleWeek editable={false} />
       </SectionCard>
     </Box>
   );
@@ -1577,6 +2006,9 @@ export function StudentSchedulePage() {
 export function CertificateRequestPage() {
   const [certificateRequests, setCertificateRequests] = useState<CertificateRequestView[]>([]);
   const [type, setType] = useState<CertificateType>('EDUCATION');
+  const [customTitle, setCustomTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [deliveryMethod, setDeliveryMethod] = useState<'PICKUP' | 'DIGITAL'>('PICKUP');
   const [loading, setLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -1603,8 +2035,15 @@ export function CertificateRequestPage() {
     setError('');
     setSuccess('');
     try {
-      const request = await createCertificateRequest(type);
+      const request = await createCertificateRequest({
+        type,
+        customTitle: type === 'OTHER' ? customTitle.trim() : null,
+        description: description.trim(),
+        deliveryMethod,
+      });
       setCertificateRequests((current) => [request, ...current]);
+      setCustomTitle('');
+      setDescription('');
       setSuccess('Заявка отправлена в учебную часть.');
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Не удалось подать заявку.');
@@ -1633,13 +2072,34 @@ export function CertificateRequestPage() {
         <Box component="form" onSubmit={handleSubmit} className="campus-form">
           <TextField select label="Вид справки" value={type} onChange={(event) => {
             const value = event.target.value;
-            setType(value === 'INCOME' || value === 'MILITARY' ? value : 'EDUCATION');
+            setType(value === 'INCOME' || value === 'MILITARY' || value === 'OTHER' ? value : 'EDUCATION');
           }} fullWidth>
             <MenuItem value="EDUCATION">Справка об обучении</MenuItem>
             <MenuItem value="INCOME">Справка о доходах</MenuItem>
             <MenuItem value="MILITARY">Справка для военкомата</MenuItem>
+            <MenuItem value="OTHER">Свой вариант</MenuItem>
           </TextField>
-          <Typography variant="body2" color="text.secondary">Готовую справку в формате PDF можно скачать после того, как учебная часть прикрепит её к одобренной заявке.</Typography>
+          {type === 'OTHER' && <TextField label="Название справки" value={customTitle} onChange={(event) => setCustomTitle(event.target.value)} inputProps={{ maxLength: 120 }} required fullWidth />}
+          <TextField
+            select
+            label="Способ получения"
+            value={deliveryMethod}
+            onChange={(event) => setDeliveryMethod(event.target.value === 'DIGITAL' ? 'DIGITAL' : 'PICKUP')}
+            fullWidth
+          >
+            <MenuItem value="PICKUP">Заберу в учебной части</MenuItem>
+            <MenuItem value="DIGITAL">Получить электронный файл</MenuItem>
+          </TextField>
+          <TextField
+            label="Описание и дополнительные сведения"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            inputProps={{ maxLength: 2000 }}
+            multiline
+            minRows={3}
+            fullWidth
+          />
+          <Typography variant="body2" color="text.secondary">Электронную справку можно скачать после подготовки; статус заявления будет виден в списке ниже.</Typography>
           {error && <Alert severity="error">{error}</Alert>}
           {success && <Alert severity="success">{success}</Alert>}
           <Button type="submit" variant="contained" disabled={isLoading} startIcon={isLoading ? <CircularProgress size={18} color="inherit" /> : undefined}>
@@ -1653,10 +2113,15 @@ export function CertificateRequestPage() {
           {!loading && certificateRequests.length === 0 && !error && <Typography color="text.secondary">Заявлений пока нет.</Typography>}
           {certificateRequests.map((request) => (
             <Stack key={request.id} direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" gap={1}>
-              <Box sx={{ minWidth: 0 }}><Typography fontWeight={650} sx={{ overflowWrap: 'anywhere' }}>{certificateTypeLabels[request.type]}</Typography><Typography variant="caption" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>{formatDate(request.createdAt, false)}</Typography>{request.rejectionReason && <Typography variant="body2" color="error">{request.rejectionReason}</Typography>}</Box>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography fontWeight={650} sx={{ overflowWrap: 'anywhere' }}>{certificateTitle(request)}</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>{formatDate(request.createdAt, false)} · {request.deliveryMethod === 'DIGITAL' ? 'электронный файл' : 'получение в учебной части'}</Typography>
+                {request.description && <Typography variant="body2">{request.description}</Typography>}
+                {request.rejectionReason && <Typography variant="body2" color="error">{request.rejectionReason}</Typography>}
+              </Box>
               <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                 <Chip size="small" label={certificateStatusLabels[request.status]} className={`certificate-status certificate-status-${request.status}`} />
-                {request.status === 'APPROVED' && request.documentAvailable && request.documentName && (
+                {(request.status === 'READY' || request.status === 'ISSUED' || request.status === 'APPROVED') && request.documentAvailable && request.documentName && (
                   <Button size="small" onClick={() => void handleDownload(request)}>Скачать PDF</Button>
                 )}
               </Stack>

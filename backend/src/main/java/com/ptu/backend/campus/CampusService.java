@@ -18,6 +18,7 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Locale;
@@ -47,6 +48,24 @@ public class CampusService {
         return ids.stream().map(this::eventView).toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<OrganizerReviewView> organizerReviews(UUID organizerId) {
+        if (organizerId == null || count("select count(*) from users where id = ?", organizerId) == 0) {
+            throw ApiException.notFound("Организатор не найден");
+        }
+        return jdbc.query("""
+                select r.id, a.title event_title, u.full_name student_name, r.rating, r.text, r.created_at
+                from reviews r
+                join activities a on a.id = r.activity_id
+                join users u on u.id = r.author_id
+                where a.teacher_id = ? and r.status = 'APPROVED'
+                order by r.created_at desc, r.id desc
+                """, (rs, row) -> new OrganizerReviewView(
+                Long.toString(rs.getLong("id")), rs.getString("event_title"), rs.getString("student_name"),
+                rs.getInt("rating"), rs.getString("text"), rs.getTimestamp("created_at").toInstant().toString()),
+                organizerId);
+    }
+
     @Transactional
     public EventView createEvent(UserPrincipal principal, CreateEventRequest request) {
         requireRole(principal, Role.TEACHER, Role.ORGANIZER);
@@ -74,11 +93,15 @@ public class CampusService {
         requireRole(principal, Role.STUDENT);
         requireStudentProfile(principal.id());
         EventRow event = eventForUpdate(eventId);
-        if (!event.active || !"INDIVIDUAL".equals(event.format)) {
-            throw ApiException.badRequest("Запись доступна только на активные индивидуальные мероприятия");
-        }
-        if (!event.startsAt.isAfter(LocalDateTime.now())) {
+        if (!event.startsAt.isAfter(nowUtc())) {
             throw ApiException.conflict("Регистрация на мероприятие завершена");
+        }
+        if (!event.active) {
+            throw ApiException.conflict("Запись на мероприятие завершена");
+        }
+        if ("GROUP".equals(event.format)) {
+            registerStudentGroupForEvent(principal, eventId, event);
+            return;
         }
         if (count("select count(*) from participations where activity_id = ?", eventId) >= event.capacity) {
             throw ApiException.conflict("Достигнут лимит участников");
@@ -93,6 +116,58 @@ public class CampusService {
         }
     }
 
+    private void registerStudentGroupForEvent(UserPrincipal principal, long eventId, EventRow event) {
+        UUID groupId = jdbc.query("""
+                select group_id from student_profiles where user_id = ?
+                """, (rs, row) -> rs.getObject("group_id", UUID.class), principal.id()).stream().findFirst()
+                .orElseThrow(() -> ApiException.badRequest("Сначала подтвердите свою учебную группу"));
+        requireGroupRegistrationPermission(principal, groupId);
+        UUID registrationId = jdbc.query("""
+                select id from campus_event_group_registrations where activity_id = ? and group_id = ?
+                """, (rs, row) -> rs.getObject("id", UUID.class), eventId, groupId).stream().findFirst()
+                .orElseGet(() -> createStudentGroupRegistration(principal, eventId, event, groupId));
+        int joined = jdbc.update("""
+                update participations set participation_confirmed = true, status = 'CONFIRMED', updated_at = now()
+                where activity_id = ? and group_registration_id = ? and student_id = ?
+                    and participation_confirmed = false
+                """, eventId, registrationId, principal.id());
+        if (joined == 0) {
+            if (count("""
+                    select count(*) from participations where activity_id = ? and group_registration_id = ?
+                        and student_id = ? and participation_confirmed = true
+                    """, eventId, registrationId, principal.id()) == 0) {
+                throw ApiException.conflict("Ваша запись не найдена в заявке учебной группы");
+            }
+            throw ApiException.conflict("Вы уже подтвердили участие в мероприятии");
+        }
+    }
+
+    private UUID createStudentGroupRegistration(UserPrincipal principal, long eventId, EventRow event, UUID groupId) {
+        List<UUID> members = jdbc.query("""
+                select user_id from student_profiles where group_id = ? order by user_id
+                """, (rs, row) -> rs.getObject("user_id", UUID.class), groupId);
+        if (members.isEmpty()) {
+            throw ApiException.badRequest("В учебной группе пока нет студентов");
+        }
+        if (count("select count(*) from participations where activity_id = ?", eventId) + members.size()
+                > event.capacity) {
+            throw ApiException.conflict("Для всей учебной группы недостаточно свободных мест");
+        }
+        UUID registrationId = jdbc.queryForObject("""
+                insert into campus_event_group_registrations(activity_id, group_id, added_by, group_size)
+                values (?, ?, ?, ?) returning id
+                """, UUID.class, eventId, groupId, principal.id(), members.size());
+        for (UUID studentId : members) {
+            jdbc.update("""
+                    insert into participations(activity_id, student_id, status, points_boa, points_bua,
+                        group_registration_id, participation_confirmed)
+                    values (?, ?, 'REGISTERED', 0, 0, ?, false)
+                    on conflict (activity_id, student_id) do nothing
+                    """, eventId, studentId, registrationId);
+        }
+        return registrationId;
+    }
+
     @Transactional
     public void registerGroup(UserPrincipal principal, long eventId, GroupRegistrationRequest request) {
         if (request == null || request.groupId() == null) {
@@ -103,7 +178,7 @@ public class CampusService {
         if (!event.active || !"GROUP".equals(event.format)) {
             throw ApiException.badRequest("Мероприятие не поддерживает групповую регистрацию");
         }
-        if (!event.startsAt.isAfter(LocalDateTime.now())) {
+        if (!event.startsAt.isAfter(nowUtc())) {
             throw ApiException.conflict("Регистрация на мероприятие завершена");
         }
         requireGroupRegistrationPermission(principal, groupId);
@@ -157,7 +232,7 @@ public class CampusService {
                 rs.getLong("activity_id")), participantId, eventId).stream().findFirst()
                 .orElseThrow(() -> ApiException.notFound("Участник мероприятия не найден"));
         EventRow event = eventForUpdate(eventId);
-        if (event.endsAt.isAfter(LocalDateTime.now())) {
+        if (event.endsAt.isAfter(nowUtc())) {
             throw ApiException.conflict("Начислять баллы можно после завершения мероприятия");
         }
         UUID groupId = jdbc.queryForObject("""
@@ -184,17 +259,6 @@ public class CampusService {
                 .multiply(BigDecimal.valueOf(request.activityPercent()))
                 .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP).intValueExact();
         BigDecimal amount = BigDecimal.valueOf(points);
-        if (points > 0) {
-            UUID budgetOwnerId = principal.role() == Role.TEACHER ? principal.id() : event.creatorId;
-            int budgetUpdated = jdbc.update("""
-                    update teacher_budgets
-                    set spent_budget = spent_budget + ?, updated_at = now()
-                    where teacher_id = ? and total_budget - spent_budget >= ?
-                    """, amount, budgetOwnerId, amount);
-            if (budgetUpdated == 0) {
-                throw ApiException.badRequest("Бюджет создателя мероприятия отсутствует или исчерпан");
-            }
-        }
         String pointsColumn = "БОА".equals(event.activityType) ? "boa_points" : "bua_points";
         String participationColumn = "БОА".equals(event.activityType) ? "points_boa" : "points_bua";
         jdbc.update("update student_profiles set " + pointsColumn + " = " + pointsColumn
@@ -218,7 +282,7 @@ public class CampusService {
                 rs.getObject("group_registration_id", UUID.class), rs.getBoolean("participation_confirmed")),
                 eventId, principal.id()).stream().findFirst()
                 .orElseThrow(() -> ApiException.forbidden("Оставить отзыв могут только участники мероприятия"));
-        if (eligibility.endsAt.isAfter(LocalDateTime.now())) {
+        if (eligibility.endsAt.isAfter(nowUtc())) {
             throw ApiException.badRequest("Отзыв можно оставить после завершения мероприятия");
         }
         if (!eligibility.participationConfirmed) {
@@ -393,21 +457,17 @@ public class CampusService {
     @Transactional(readOnly = true)
     public CatalogView catalog(UserPrincipal principal) {
         List<GroupView> groups = groups(principal);
-        CaseRow campusCase = jdbc.query("""
-                select id, price from cases where active = true and name = 'Кейс кампуса' order by id limit 1
-                """, (rs, row) -> new CaseRow(rs.getLong(1), rs.getBigDecimal(2))).stream().findFirst()
-                .orElseThrow(() -> ApiException.notFound("Каталог кейсов не настроен"));
-        List<RewardCatalogRow> rewards = jdbc.query("""
-                select reward_name, cosmetic_type, rarity, weight from campus_case_reward_catalog
-                where case_id = ? order by id
-                """, (rs, row) -> new RewardCatalogRow(rs.getString(1), rs.getString(2),
-                rs.getString(3), rs.getInt(4)), campusCase.id);
-        int total = rewards.stream().mapToInt(RewardCatalogRow::weight).sum();
-        List<CampusCaseRewardView> rewardViews = rewards.stream()
-                .map(r -> new CampusCaseRewardView(r.name, r.cosmeticType, r.rarity,
-                        total == 0 ? 0 : (int) Math.round(r.weight * 100.0 / total)))
-                .toList();
-        return new CatalogView(groups, campusCase.price, rewardViews);
+        List<CampusCaseView> cases = jdbc.query("""
+                select id, name, description, price from cases where active = true order by id
+                """, (rs, row) -> {
+            long id = rs.getLong("id");
+            return new CampusCaseView(Long.toString(id), rs.getString("name"), rs.getString("description"),
+                    rs.getBigDecimal("price"), "/campus/cases/" + id + "/image", caseRewards(id));
+        });
+        CampusCaseView defaultCase = cases.stream().filter(c -> "Кейс кампуса".equals(c.name()))
+                .findFirst().orElse(cases.isEmpty() ? null : cases.get(0));
+        return new CatalogView(groups, defaultCase == null ? BigDecimal.ZERO : defaultCase.price(),
+                defaultCase == null ? List.of() : defaultCase.rewards(), cases);
     }
 
     @Transactional
@@ -447,12 +507,17 @@ public class CampusService {
     @Transactional(readOnly = true)
     public List<ScheduleView> schedule(UserPrincipal principal) {
         return jdbc.query("""
-                select s.id, s.weekday, s.start_time, s.end_time, s.group_id, g.name, s.subject,
-                    s.teacher_id, coalesce(u.full_name, s.teacher) teacher_name, s.room
+                select s.id, s.weekday, s.start_time, s.end_time, s.group_id, g.name,
+                    coalesce(d.name, s.subject) subject,
+                    s.discipline_id, s.teacher_id, coalesce(u.full_name, s.teacher) teacher_name, s.room
                 from campus_schedule_entries s join study_groups g on g.id = s.group_id
+                left join disciplines d on d.id = s.discipline_id
                 left join users u on u.id = s.teacher_id
                 where s.group_id in (
                     select sp.group_id from student_profiles sp where sp.user_id = ?
+                    union
+                    select scheduled.group_id from campus_schedule_entries scheduled
+                    where scheduled.teacher_id = ?
                     union
                     select ta.group_id from teacher_assignments ta join semesters sem
                         on sem.id = ta.semester_id and sem.is_current = true
@@ -461,7 +526,7 @@ public class CampusService {
                     select id from study_groups where ? in ('ORGANIZER', 'ACADEMIC_OFFICE')
                 )
                 order by s.weekday, s.start_time, s.id
-                """, scheduleMapper(), principal.id(), principal.id(), principal.role().name());
+                """, scheduleMapper(), principal.id(), principal.id(), principal.id(), principal.role().name());
     }
 
     @Transactional(readOnly = true)
@@ -486,14 +551,16 @@ public class CampusService {
         requireRole(principal, Role.ACADEMIC_OFFICE);
         validateSchedule(request);
         UUID groupId = parseUuid(request.groupId(), "groupId");
+        UUID disciplineId = parseUuid(request.disciplineId(), "disciplineId");
+        String subject = activeDisciplineName(disciplineId);
         String teacherName = activeTeacherName(request.teacherId());
         ensureTeacherHasNoScheduleOverlap(null, request, parseUuid(request.teacherId(), "teacherId"));
         UUID id = jdbc.queryForObject("""
                 insert into campus_schedule_entries(group_id, weekday, start_time, end_time, subject, teacher,
-                    teacher_id, room, created_by)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?) returning id
+                    discipline_id, teacher_id, room, created_by)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) returning id
                 """, UUID.class, groupId, request.weekday().trim(), request.startTime().trim(),
-                request.endTime().trim(), request.subject().trim(), teacherName, parseUuid(request.teacherId(), "teacherId"),
+                request.endTime().trim(), subject, teacherName, disciplineId, parseUuid(request.teacherId(), "teacherId"),
                 request.room().trim(), principal.id());
         ScheduleView created = scheduleEntry(id, false);
         recordScheduleChange(groupId, id, "ADDED", "Добавлено занятие: " + describeSchedule(created));
@@ -506,16 +573,18 @@ public class CampusService {
         validateSchedule(request);
         ScheduleView previous = scheduleEntry(scheduleId, true);
         UUID groupId = parseUuid(request.groupId(), "groupId");
+        UUID disciplineId = parseUuid(request.disciplineId(), "disciplineId");
+        String subject = activeDisciplineName(disciplineId);
         UUID teacherId = parseUuid(request.teacherId(), "teacherId");
         String teacherName = activeTeacherName(request.teacherId());
         ensureTeacherHasNoScheduleOverlap(scheduleId, request, teacherId);
         jdbc.update("""
                 update campus_schedule_entries
                 set group_id = ?, weekday = ?, start_time = ?, end_time = ?, subject = ?, teacher = ?,
-                    teacher_id = ?, room = ?
+                    discipline_id = ?, teacher_id = ?, room = ?
                 where id = ?
                 """, groupId, request.weekday().trim(), request.startTime().trim(), request.endTime().trim(),
-                request.subject().trim(), teacherName, teacherId, request.room().trim(), scheduleId);
+                subject, teacherName, disciplineId, teacherId, request.room().trim(), scheduleId);
         ScheduleView updated = scheduleEntry(scheduleId, false);
         String message = "Изменение расписания. Было: " + describeSchedule(previous)
                 + ". Стало: " + describeSchedule(updated);
@@ -543,10 +612,12 @@ public class CampusService {
             throw ApiException.badRequest("Укажите корректные интервалы времени");
         }
         List<ScheduleView> entries = jdbc.query("""
-                select s.id, s.weekday, s.start_time, s.end_time, s.group_id, g.name, s.subject,
-                    s.teacher_id, coalesce(u.full_name, s.teacher) teacher_name, s.room
+                select s.id, s.weekday, s.start_time, s.end_time, s.group_id, g.name,
+                    coalesce(d.name, s.subject) subject,
+                    s.discipline_id, s.teacher_id, coalesce(u.full_name, s.teacher) teacher_name, s.room
                 from campus_schedule_entries s
                 join study_groups g on g.id = s.group_id
+                left join disciplines d on d.id = s.discipline_id
                 left join users u on u.id = s.teacher_id
                 where s.start_time = ? and s.end_time = ?
                 order by s.teacher_id, s.weekday, s.id
@@ -594,20 +665,43 @@ public class CampusService {
         requireRole(principal, Role.STUDENT);
         requireStudentProfile(principal.id());
         int experience = Math.max(0, academicRating(principal.id()));
-        boolean premium = premiumOwned(principal.id());
-        BigDecimal price = jdbc.queryForObject(
-                "select premium_pass_price from campus_runtime_catalog_config where id = 1", BigDecimal.class);
+        PassSeasonRow season = jdbc.queryForObject(
+                """
+                select id, season_name, starts_at, ends_at, premium_pass_price
+                from campus_pass_seasons where is_active
+                """,
+                (rs, row) -> new PassSeasonRow(rs.getObject("id", UUID.class), rs.getString("season_name"),
+                        rs.getTimestamp("starts_at").toInstant().toString(),
+                        rs.getTimestamp("ends_at").toInstant().toString(),
+                        rs.getBigDecimal("premium_pass_price")));
+        boolean premium = premiumOwned(principal.id(), season.id);
         int level = CampusRules.passLevel(experience);
         List<PassRewardView> rewards = jdbc.query("""
                 select r.id, r.track, r.level, r.title, r.reward_kind,
+                    case when r.reward_kind = 'case' then (
+                        select '/campus/cases/' || c.id || '/image'
+                        from cases c where c.id = r.case_id
+                            and c.image_data is not null and c.image_content_type is not null
+                    ) else (
+                        select '/campus/cases/' || c.case_id || '/rewards/' || c.id || '/image'
+                        from campus_case_reward_catalog c
+                        join cases cs on cs.id = c.case_id
+                        where c.cosmetic_type = r.cosmetic_type and c.rarity = r.rarity
+                            and c.image_data is not null and c.image_content_type is not null
+                        order by cs.active desc, c.case_id, c.id
+                        limit 1
+                    ) end image_url,
                     (c.id is not null) claimed
                 from campus_pass_reward_catalog r
                 left join campus_pass_reward_claims c on c.reward_id = r.id and c.user_id = ?
+                where r.season_id = ?
                 order by r.level, r.track
                 """, (rs, row) -> new PassRewardView(rs.getObject("id", UUID.class).toString(),
                 rs.getString("track"), rs.getInt("level"), rs.getString("title"),
-                rs.getString("reward_kind"), rs.getBoolean("claimed")), principal.id());
-        return new PassView(experience, premium, price, rewards);
+                rs.getString("reward_kind"), rs.getBoolean("claimed"), rs.getString("image_url")),
+                principal.id(), season.id);
+        return new PassView(experience, premium, season.premiumPrice, season.name, season.startsAt,
+                season.endsAt, rewards);
     }
 
     @Transactional
@@ -615,35 +709,43 @@ public class CampusService {
         requireRole(principal, Role.STUDENT);
         requireStudentProfile(principal.id());
         ensureWallet(principal.id());
+        UUID seasonId = activePassSeasonId();
         jdbc.update("""
-                insert into campus_pass_accounts(user_id, premium_pass_owned) values (?, false)
-                on conflict (user_id) do nothing
-                """, principal.id());
+                insert into campus_pass_accounts(user_id, season_id, premium_pass_owned) values (?, ?, false)
+                on conflict (user_id, season_id) do nothing
+                """, principal.id(), seasonId);
         Boolean owned = jdbc.queryForObject(
-                "select premium_pass_owned from campus_pass_accounts where user_id = ? for update",
-                Boolean.class, principal.id());
+                "select premium_pass_owned from campus_pass_accounts where user_id = ? and season_id = ? for update",
+                Boolean.class, principal.id(), seasonId);
         if (Boolean.TRUE.equals(owned)) {
             throw ApiException.conflict("Премиум-пропуск уже приобретён");
         }
         BigDecimal price = jdbc.queryForObject(
-                "select premium_pass_price from campus_runtime_catalog_config where id = 1", BigDecimal.class);
+                "select premium_pass_price from campus_pass_seasons where id = ?",
+                BigDecimal.class, seasonId);
         debit(principal.id(), price, PREMIUM_PASS);
-        jdbc.update("update campus_pass_accounts set premium_pass_owned = true, updated_at = now() where user_id = ?",
-                principal.id());
+        jdbc.update("""
+                update campus_pass_accounts set premium_pass_owned = true, updated_at = now()
+                where user_id = ? and season_id = ?
+                """, principal.id(), seasonId);
     }
 
     @Transactional
     public void claimPassReward(UserPrincipal principal, UUID rewardId) {
         requireRole(principal, Role.STUDENT);
         requireStudentProfile(principal.id());
+        UUID seasonId = activePassSeasonId();
         PassRewardClaimRow reward = jdbc.query("""
-                select id, track, level, title, reward_kind, cosmetic_type, rarity
-                from campus_pass_reward_catalog where id = ? for update
+                select r.id, r.track, r.level, r.title, r.reward_kind, r.cosmetic_type, r.rarity, r.case_id
+                from campus_pass_reward_catalog r
+                join campus_pass_seasons s on s.id = r.season_id and s.is_active
+                where r.id = ? for update of r
                 """, (rs, row) -> new PassRewardClaimRow(rs.getObject("id", UUID.class),
                 rs.getString("track"), rs.getInt("level"), rs.getString("title"),
-                rs.getString("reward_kind"), rs.getString("cosmetic_type"), rs.getString("rarity")), rewardId)
+                rs.getString("reward_kind"), rs.getString("cosmetic_type"), rs.getString("rarity"),
+                rs.getObject("case_id", Long.class)), rewardId)
                 .stream().findFirst().orElseThrow(() -> ApiException.notFound("Награда не найдена"));
-        if ("premium".equals(reward.track) && !premiumOwned(principal.id())) {
+        if ("premium".equals(reward.track) && !premiumOwned(principal.id(), seasonId)) {
             throw ApiException.forbidden("Для получения награды нужен премиум-пропуск");
         }
         if (CampusRules.passLevel(Math.max(0, academicRating(principal.id()))) < reward.level) {
@@ -651,8 +753,29 @@ public class CampusService {
         }
         jdbc.update("insert into campus_pass_reward_claims(user_id, reward_id) values (?, ?)",
                 principal.id(), reward.id);
-        insertInventory(principal.id(), reward.title,
-                reward.kind, reward.cosmeticType, reward.rarity, "Боевой пропуск");
+        if ("case".equals(reward.kind)) {
+            insertCaseInventory(principal.id(), reward.caseId, "Боевой пропуск");
+        } else {
+            PassRewardArtwork artwork = jdbc.query("""
+                    select c.case_id, c.image_data, c.image_content_type
+                    from campus_case_reward_catalog c
+                    join cases cs on cs.id = c.case_id
+                    where c.cosmetic_type = ? and c.rarity = ?
+                        and c.image_data is not null and c.image_content_type is not null
+                    order by cs.active desc, c.case_id, c.id
+                    limit 1
+                    """, (rs, row) -> new PassRewardArtwork(rs.getLong("case_id"),
+                    rs.getBytes("image_data"), rs.getString("image_content_type")),
+                    reward.cosmeticType, reward.rarity).stream().findFirst().orElse(null);
+            if (artwork == null) {
+                insertInventory(principal.id(), reward.title, reward.kind, reward.cosmeticType,
+                        reward.rarity, "Боевой пропуск");
+            } else {
+                insertInventory(principal.id(), reward.title, reward.kind, reward.cosmeticType,
+                        reward.rarity, "Боевой пропуск", artwork.caseId(), artwork.imageData(),
+                        artwork.imageContentType());
+            }
+        }
     }
 
     @Transactional(readOnly = true)
@@ -660,7 +783,7 @@ public class CampusService {
         requireRole(principal, Role.STUDENT);
         requireStudentProfile(principal.id());
         return jdbc.query("""
-                select id, item_name, item_kind, cosmetic_type, rarity, source, acquired_at
+                select id, case_id, item_name, item_kind, cosmetic_type, rarity, source, acquired_at
                 from inventory_items where owner_student_id = ? order by acquired_at desc, id desc
                 """, inventoryMapper(), principal.id());
     }
@@ -685,10 +808,10 @@ public class CampusService {
             throw ApiException.badRequest("Цена кейса настроена некорректно");
         }
         List<RewardCatalogRow> rewards = jdbc.query("""
-                select reward_name, cosmetic_type, rarity, weight from campus_case_reward_catalog
+                select id, reward_name, cosmetic_type, rarity, weight, image_data, image_content_type
+                from campus_case_reward_catalog
                 where case_id = ? order by id
-                """, (rs, row) -> new RewardCatalogRow(rs.getString(1), rs.getString(2),
-                rs.getString(3), rs.getInt(4)), caseItem.caseId);
+                """, rewardCatalogMapper(), caseItem.caseId);
         RewardCatalogRow reward = chooseReward(rewards);
         debit(principal.id(), campusCase.price, CASE_OPEN);
         if (caseItem.quantity > 1) {
@@ -699,14 +822,106 @@ public class CampusService {
                     inventoryItemId, principal.id());
         }
         return insertInventory(principal.id(), reward.name, "cosmetic", reward.cosmeticType,
-                reward.rarity, "Кейс кампуса");
+                reward.rarity, "Кейс кампуса", caseItem.caseId, reward.imageData, reward.imageContentType);
+    }
+
+    @Transactional(readOnly = true)
+    public CaseImage caseImage(long caseId) {
+        return jdbc.query("""
+                select image_data, image_content_type from cases where id = ? and active = true
+                """, (rs, row) -> new CaseImage(rs.getBytes("image_data"), rs.getString("image_content_type")),
+                caseId).stream().findFirst().filter(image -> image.data() != null)
+                .orElseThrow(() -> ApiException.notFound("Изображение кейса не найдено"));
+    }
+
+    @Transactional(readOnly = true)
+    public CaseImage caseRewardImage(long caseId, long rewardId) {
+        return jdbc.query("""
+                select image_data, image_content_type from campus_case_reward_catalog
+                where id = ? and case_id = ?
+                """, (rs, row) -> new CaseImage(rs.getBytes("image_data"), rs.getString("image_content_type")),
+                rewardId, caseId).stream().findFirst().filter(image -> image.data() != null)
+                .orElseThrow(() -> ApiException.notFound("Изображение награды не найдено"));
+    }
+
+    @Transactional(readOnly = true)
+    public CaseImage inventoryImage(UserPrincipal principal, long itemId) {
+        InventoryArtwork inventoryArtwork = jdbc.query("""
+                select image_data, image_content_type, item_kind, cosmetic_type, rarity
+                from inventory_items where id = ? and owner_student_id = ?
+                """, (rs, row) -> new InventoryArtwork(rs.getBytes("image_data"),
+                rs.getString("image_content_type"), rs.getString("item_kind"),
+                rs.getString("cosmetic_type"), rs.getString("rarity")), itemId, principal.id())
+                .stream().findFirst().orElseThrow(() -> ApiException.notFound("Предмет не найден"));
+        if (inventoryArtwork.imageData() != null && inventoryArtwork.imageContentType() != null) {
+            return new CaseImage(inventoryArtwork.imageData(), inventoryArtwork.imageContentType());
+        }
+        if ("cosmetic".equals(inventoryArtwork.kind())) {
+            return jdbc.query("""
+                    select c.image_data, c.image_content_type
+                    from campus_case_reward_catalog c
+                    join cases cs on cs.id = c.case_id
+                    where c.cosmetic_type = ? and c.rarity = ?
+                        and c.image_data is not null and c.image_content_type is not null
+                    order by cs.active desc, c.case_id, c.id
+                    limit 1
+                    """, (rs, row) -> new CaseImage(rs.getBytes("image_data"),
+                    rs.getString("image_content_type")), inventoryArtwork.cosmeticType(),
+                    inventoryArtwork.rarity()).stream().findFirst()
+                    .orElseThrow(() -> ApiException.notFound("Изображение предмета не найдено"));
+        }
+        throw ApiException.notFound("Изображение предмета не найдено");
+    }
+
+    @Transactional(readOnly = true)
+    public ProfileCosmeticsView profileCosmetics(UserPrincipal principal) {
+        requireRole(principal, Role.STUDENT);
+        return jdbc.query("""
+                select equipped_avatar_item_id, equipped_frame_item_id, equipped_background_item_id
+                from student_profiles where user_id = ?
+                """, (rs, row) -> new ProfileCosmeticsView(
+                nullableLong(rs, "equipped_avatar_item_id"), nullableLong(rs, "equipped_frame_item_id"),
+                nullableLong(rs, "equipped_background_item_id")), principal.id()).stream().findFirst()
+                .orElseThrow(() -> ApiException.notFound("Профиль студента не найден"));
+    }
+
+    @Transactional
+    public ProfileCosmeticsView saveProfileCosmetics(UserPrincipal principal, SaveProfileCosmeticsRequest request) {
+        requireRole(principal, Role.STUDENT);
+        requireStudentProfile(principal.id());
+        Long avatarId = validateEquippedItem(principal.id(), request.avatarItemId(), "avatar");
+        Long frameId = validateEquippedItem(principal.id(), request.frameItemId(), "avatar-frame");
+        Long backgroundId = validateEquippedItem(principal.id(), request.backgroundItemId(), "profile-background");
+        jdbc.update("""
+                update student_profiles set equipped_avatar_item_id = ?, equipped_frame_item_id = ?,
+                    equipped_background_item_id = ?, updated_at = now() where user_id = ?
+                """, avatarId, frameId, backgroundId, principal.id());
+        return profileCosmetics(principal);
+    }
+
+    private Long validateEquippedItem(UUID userId, String id, String expectedType) {
+        if (id == null || id.isBlank()) return null;
+        long inventoryId;
+        try {
+            inventoryId = Long.parseLong(id);
+        } catch (NumberFormatException exception) {
+            throw ApiException.badRequest("Выбранный предмет профиля некорректен");
+        }
+        if (count("""
+                select count(*) from inventory_items where id = ? and owner_student_id = ?
+                    and item_kind = 'cosmetic' and cosmetic_type = ?
+                """, inventoryId, userId, expectedType) == 0) {
+            throw ApiException.badRequest("Выберите предмет этого типа из своего инвентаря");
+        }
+        return inventoryId;
     }
 
     private EventView eventView(long eventId) {
         EventRow event = jdbc.query("""
                 select a.id, a.title, a.description, a.starts_at, a.ends_at, a.location, a.category,
                     a.max_participants, a.participation_mode, a.required_activation_percent,
-                    a.campus_activity_type, a.max_points, a.teacher_id, u.full_name, a.active
+                    a.campus_activity_type, a.max_points, a.teacher_id, u.full_name, a.active,
+                    a.reward_boa, a.reward_bua
                 from activities a join users u on u.id = a.teacher_id where a.id = ?
                 """, eventMapper(), eventId).stream().findFirst()
                 .orElseThrow(() -> ApiException.notFound("Мероприятие не найдено"));
@@ -748,11 +963,19 @@ public class CampusService {
                     case "REJECTED" -> "rejected";
                     default -> "pending";
                 }, rs.getTimestamp("created_at").toInstant().toString()), eventId);
+        EventReviewSummary reviewSummary = jdbc.queryForObject("""
+                select count(*) as approved_count, avg(rating) as average_rating
+                from reviews where activity_id = ? and status = 'APPROVED'
+                """, (rs, row) -> new EventReviewSummary(rs.getLong("approved_count"),
+                rs.getBigDecimal("average_rating")), eventId);
+        BigDecimal rating = reviewSummary != null && reviewSummary.approvedCount() >= 10
+                ? reviewSummary.averageRating() : null;
         return new EventView(Long.toString(event.id), event.title, event.description == null ? "" : event.description,
-                event.startsAt.toString(),
-                event.endsAt.toString(), event.location, event.category, event.capacity, event.format,
+                event.startsAt.toString() + "Z",
+                event.endsAt.toString() + "Z", event.location, event.category, event.capacity,
+                "GROUP".equals(event.format) ? "group" : "individual",
                 "GROUP".equals(event.format) ? event.groupMinPercent : null, event.activityType, event.maxPoints,
-                event.creatorId.toString(), event.creatorName,
+                event.creatorId.toString(), event.creatorName, rating,
                 registrations, participants, reviews);
     }
 
@@ -786,11 +1009,8 @@ public class CampusService {
             }
             return;
         }
-        if (principal.role() == Role.ORGANIZER) {
-            return;
-        }
         if (principal.role() != Role.TEACHER) {
-            throw ApiException.forbidden("Нет прав на регистрацию группы");
+            throw ApiException.forbidden("Группу на мероприятие может записать только её староста или преподаватель");
         }
         requireGroupAccess(principal, groupId);
     }
@@ -877,27 +1097,62 @@ public class CampusService {
 
     private InventoryItemView insertInventory(UUID userId, String name, String kind, String cosmeticType,
                                               String rarity, String source) {
-        Long caseId = jdbc.query("select id from cases where active = true and name = 'Кейс кампуса' order by id limit 1",
+        Long caseId = jdbc.query("select id from cases order by active desc, id limit 1",
                 (rs, row) -> rs.getLong(1)).stream().findFirst()
                 .orElseThrow(() -> ApiException.notFound("Каталог кейсов не настроен"));
+        return insertInventory(userId, name, kind, cosmeticType, rarity, source, caseId, null, null);
+    }
+
+    private InventoryItemView insertInventory(UUID userId, String name, String kind, String cosmeticType,
+                                              String rarity, String source, long caseId, byte[] imageData,
+                                              String imageContentType) {
         Long inventoryId = jdbc.queryForObject("""
                 insert into inventory_items(case_id, owner_student_id, item_name, rarity, quantity, item_kind,
-                    cosmetic_type, source)
-                values (?, ?, ?, ?, 1, ?, ?, ?) returning id
+                    cosmetic_type, source, image_data, image_content_type)
+                values (?, ?, ?, ?, 1, ?, ?, ?, ?, ?) returning id
                 """, Long.class, caseId, userId, name, databaseRarity(rarity),
-                kind, cosmeticType, source);
+                kind, cosmeticType, source, imageData, imageContentType);
         return jdbc.query("""
-                select id, item_name, item_kind, cosmetic_type, rarity, source, acquired_at
+                select id, case_id, item_name, item_kind, cosmetic_type, rarity, source, acquired_at
                 from inventory_items where id = ?
-                """, inventoryMapper(), inventoryId).getFirst();
+                """, inventoryMapper(), inventoryId).get(0);
+    }
+
+    private InventoryItemView insertCaseInventory(UUID userId, Long caseId, String source) {
+        if (caseId == null) {
+            throw ApiException.badRequest("Для награды не выбран кейс");
+        }
+        String caseName = jdbc.query("""
+                select name from cases where id = ? and active = true
+                """, (rs, row) -> rs.getString("name"), caseId).stream().findFirst()
+                .orElseThrow(() -> ApiException.notFound("Кейс награды больше недоступен"));
+        return insertInventory(userId, caseName, "case", null, COMMON_RARITY, source, caseId, null, null);
+    }
+
+    private List<CampusCaseRewardView> caseRewards(long caseId) {
+        List<RewardCatalogRow> rewards = jdbc.query("""
+                select id, reward_name, cosmetic_type, rarity, weight, image_data, image_content_type
+                from campus_case_reward_catalog where case_id = ? order by id
+                """, rewardCatalogMapper(), caseId);
+        long total = rewards.stream().mapToLong(RewardCatalogRow::weight).sum();
+        return rewards.stream().map(reward -> new CampusCaseRewardView(
+                reward.name, reward.cosmeticType, reward.rarity,
+                total == 0 ? 0 : (int) Math.round(reward.weight * 100.0 / total),
+                "/campus/cases/" + caseId + "/rewards/" + reward.id + "/image")).toList();
+    }
+
+    private RowMapper<RewardCatalogRow> rewardCatalogMapper() {
+        return (rs, row) -> new RewardCatalogRow(rs.getLong("id"), rs.getString("reward_name"),
+                rs.getString("cosmetic_type"), rs.getString("rarity"), rs.getInt("weight"),
+                rs.getBytes("image_data"), rs.getString("image_content_type"));
     }
 
     private RewardCatalogRow chooseReward(List<RewardCatalogRow> rewards) {
-        int totalWeight = rewards.stream().mapToInt(RewardCatalogRow::weight).sum();
+        long totalWeight = rewards.stream().mapToLong(RewardCatalogRow::weight).sum();
         if (totalWeight <= 0) {
             throw ApiException.notFound("Для кейса не настроены награды");
         }
-        int ticket = secureRandom.nextInt(totalWeight);
+        long ticket = secureRandom.nextLong(totalWeight);
         List<Integer> weights = rewards.stream().map(RewardCatalogRow::weight).toList();
         return rewards.get(CampusRules.weightedIndex(weights, ticket));
     }
@@ -916,13 +1171,20 @@ public class CampusService {
                 """, userId);
     }
 
-    private boolean premiumOwned(UUID userId) {
+    private UUID activePassSeasonId() {
+        return jdbc.query("select id from campus_pass_seasons where is_active for share",
+                (rs, row) -> rs.getObject("id", UUID.class)).stream().findFirst()
+                .orElseThrow(() -> ApiException.notFound("Активный сезон ПТУ-пасса не настроен"));
+    }
+
+    private boolean premiumOwned(UUID userId, UUID seasonId) {
         jdbc.update("""
-                insert into campus_pass_accounts(user_id, premium_pass_owned) values (?, false)
-                on conflict (user_id) do nothing
-                """, userId);
+                insert into campus_pass_accounts(user_id, season_id, premium_pass_owned) values (?, ?, false)
+                on conflict (user_id, season_id) do nothing
+                """, userId, seasonId);
         return Boolean.TRUE.equals(jdbc.queryForObject(
-                "select premium_pass_owned from campus_pass_accounts where user_id = ?", Boolean.class, userId));
+                "select premium_pass_owned from campus_pass_accounts where user_id = ? and season_id = ?",
+                Boolean.class, userId, seasonId));
     }
 
     private int academicRating(UUID userId) {
@@ -948,8 +1210,8 @@ public class CampusService {
             throw ApiException.badRequest("Превышена допустимая длина поля мероприятия");
         }
         if (request.capacity() == null || request.capacity() < 1
-                || request.maxPoints() == null || request.maxPoints() < 0 || request.maxPoints() > 100) {
-            throw ApiException.badRequest("Проверьте вместимость и максимальные баллы");
+                || request.maxPoints() == null || request.maxPoints() < 0) {
+            throw ApiException.badRequest("Вместимость должна быть больше нуля, а число баллов — неотрицательным.");
         }
         if (!"individual".equals(request.format()) && !"group".equals(request.format())) {
             throw ApiException.badRequest("Формат должен быть individual или group");
@@ -982,12 +1244,12 @@ public class CampusService {
 
     private void validateSchedule(ScheduleRequest request) {
         if (request == null || blank(request.weekday()) || blank(request.startTime()) || blank(request.endTime())
-                || blank(request.groupId()) || blank(request.subject()) || blank(request.teacherId())
+                || blank(request.groupId()) || blank(request.disciplineId()) || blank(request.teacherId())
                 || blank(request.room())) {
             throw ApiException.badRequest("Заполните все поля расписания");
         }
         if (request.weekday().length() > 24 || request.startTime().length() != 5
-                || request.endTime().length() != 5 || request.subject().length() > 160
+                || request.endTime().length() != 5
                 || request.room().length() > 80) {
             throw ApiException.badRequest("Превышена допустимая длина поля расписания");
         }
@@ -1024,14 +1286,22 @@ public class CampusService {
 
     private ScheduleView scheduleEntry(UUID id, boolean forUpdate) {
         return jdbc.query("""
-                select s.id, s.weekday, s.start_time, s.end_time, s.group_id, g.name, s.subject,
-                    s.teacher_id, coalesce(u.full_name, s.teacher) teacher_name, s.room
+                select s.id, s.weekday, s.start_time, s.end_time, s.group_id, g.name,
+                    coalesce(d.name, s.subject) subject, s.discipline_id, s.teacher_id,
+                    coalesce(u.full_name, s.teacher) teacher_name, s.room
                 from campus_schedule_entries s
                 join study_groups g on g.id = s.group_id
+                left join disciplines d on d.id = s.discipline_id
                 left join users u on u.id = s.teacher_id
                 where s.id = ?
                 """ + (forUpdate ? " for update of s" : ""), scheduleMapper(), id).stream().findFirst()
                 .orElseThrow(() -> ApiException.notFound("Занятие расписания не найдено"));
+    }
+
+    private String activeDisciplineName(UUID disciplineId) {
+        return jdbc.query("select name from disciplines where id = ?",
+                        (rs, row) -> rs.getString(1), disciplineId).stream().findFirst()
+                .orElseThrow(() -> ApiException.badRequest("Выберите дисциплину из списка"));
     }
 
     private String activeTeacherName(String teacherIdValue) {
@@ -1095,16 +1365,20 @@ public class CampusService {
         };
     }
 
-    private LocalDateTime parseDateTime(String value, String field) {
+    static LocalDateTime parseDateTime(String value, String field) {
         try {
-            return LocalDateTime.parse(value);
+            return OffsetDateTime.parse(value).withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime();
         } catch (DateTimeParseException ignored) {
             try {
-                return OffsetDateTime.parse(value).toLocalDateTime();
+                return LocalDateTime.parse(value);
             } catch (DateTimeParseException ex) {
                 throw ApiException.badRequest("Некорректное значение " + field);
             }
         }
+    }
+
+    static LocalDateTime nowUtc() {
+        return LocalDateTime.now(ZoneOffset.UTC);
     }
 
     private UUID parseUuid(String value, String field) {
@@ -1146,15 +1420,28 @@ public class CampusService {
         return (rs, row) -> new ScheduleView(rs.getObject("id", UUID.class).toString(),
                 rs.getString("weekday"), rs.getString("start_time"), rs.getString("end_time"),
                 rs.getObject("group_id", UUID.class).toString(), rs.getString("name"), rs.getString("subject"),
+                rs.getObject("discipline_id", UUID.class) == null ? null : rs.getObject("discipline_id", UUID.class).toString(),
                 rs.getObject("teacher_id", UUID.class) == null ? null : rs.getObject("teacher_id", UUID.class).toString(),
                 rs.getString("teacher_name"), rs.getString("room"));
     }
 
     private RowMapper<InventoryItemView> inventoryMapper() {
-        return (rs, row) -> new InventoryItemView(Long.toString(rs.getLong("id")),
-                rs.getString("item_name"), rs.getString("item_kind"), rs.getString("cosmetic_type"),
+        return (rs, row) -> {
+            long id = rs.getLong("id");
+            long caseId = rs.getLong("case_id");
+            String kind = rs.getString("item_kind");
+            return new InventoryItemView(Long.toString(id),
+                rs.getString("item_name"), kind, rs.getString("cosmetic_type"),
                 localRarity(rs.getString("rarity")), rs.getString("source"),
-                rs.getTimestamp("acquired_at").toInstant().toString());
+                rs.getTimestamp("acquired_at").toInstant().toString(), Long.toString(caseId),
+                "case".equals(kind) ? "/campus/cases/" + caseId + "/image"
+                        : "/campus/inventory/" + id + "/image");
+        };
+    }
+
+    private String nullableLong(java.sql.ResultSet resultSet, String column) throws java.sql.SQLException {
+        Long value = resultSet.getObject(column, Long.class);
+        return value == null ? null : Long.toString(value);
     }
 
     private String localRarity(String value) {
@@ -1180,6 +1467,9 @@ public class CampusService {
                                      boolean participationConfirmed) {
     }
 
+    private record EventReviewSummary(long approvedCount, BigDecimal averageRating) {
+    }
+
     private record GroupRow(UUID id, String name, int size, UUID leaderId) {
     }
 
@@ -1192,13 +1482,24 @@ public class CampusService {
     private record CaseInventoryRow(long id, long caseId, int quantity) {
     }
 
-    private record RewardCatalogRow(String name, String cosmeticType, String rarity, int weight) {
+    private record InventoryArtwork(byte[] imageData, String imageContentType, String kind,
+                                    String cosmeticType, String rarity) {
+    }
+
+    private record PassRewardArtwork(long caseId, byte[] imageData, String imageContentType) {
+    }
+
+    private record RewardCatalogRow(long id, String name, String cosmeticType, String rarity, int weight,
+                                    byte[] imageData, String imageContentType) {
     }
 
     private record WalletRow(UUID id, BigDecimal balance) {
     }
 
     private record PassRewardClaimRow(UUID id, String track, int level, String title, String kind,
-                                      String cosmeticType, String rarity) {
+                                      String cosmeticType, String rarity, Long caseId) {
+    }
+
+    private record PassSeasonRow(UUID id, String name, String startsAt, String endsAt, BigDecimal premiumPrice) {
     }
 }

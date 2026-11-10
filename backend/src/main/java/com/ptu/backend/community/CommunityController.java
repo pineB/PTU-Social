@@ -10,6 +10,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,14 +36,16 @@ public class CommunityController {
 	private final StudyGroupRepository groups;
 	private final ParticipationRepository participations;
 	private final ActivityRepository activities;
+	private final JdbcTemplate jdbc;
 
 	public CommunityController(StudentProfileRepository profiles, UserRepository users, StudyGroupRepository groups,
-			ParticipationRepository participations, ActivityRepository activities) {
+			ParticipationRepository participations, ActivityRepository activities, JdbcTemplate jdbc) {
 		this.profiles = profiles;
 		this.users = users;
 		this.groups = groups;
 		this.participations = participations;
 		this.activities = activities;
+		this.jdbc = jdbc;
 	}
 
 	@GetMapping("/students")
@@ -88,6 +91,20 @@ public class CommunityController {
 				result.add(toAward(participation, user, activity, "БУА", participation.getPointsBua().intValue()));
 			}
 		}
+		result.addAll(jdbc.query("""
+				select s.id, s.student_id, u.full_name, g.name group_name, t.title, s.awarded_rating,
+					coalesce(s.awarded_at, s.submitted_at) created_at
+				from workspace_submissions s
+				join workspace_tasks t on t.id = s.task_id
+				join users u on u.id = s.student_id
+				join student_profiles sp on sp.user_id = s.student_id
+				join study_groups g on g.id = sp.group_id
+				where s.status = 'ACCEPTED' and s.awarded_rating > 0
+				""", (rs, row) -> new AwardView(
+				"task-" + rs.getObject("id", UUID.class), rs.getObject("student_id", UUID.class),
+				rs.getString("full_name"), rs.getString("group_name"), rs.getString("title"),
+				"Баллы за выполненное задание", "АР", rs.getInt("awarded_rating"),
+				rs.getTimestamp("created_at").toInstant())));
 		return result.stream().sorted((left, right) -> right.createdAt().compareTo(left.createdAt())).toList();
 	}
 

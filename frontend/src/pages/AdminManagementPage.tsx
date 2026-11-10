@@ -9,13 +9,20 @@ import {
   Chip,
   CircularProgress,
   Divider,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
   Stack,
   TextField,
   Typography,
 } from '@mui/material';
 import AdminPanelSettingsRoundedIcon from '@mui/icons-material/AdminPanelSettingsRounded';
+import CardGiftcardRoundedIcon from '@mui/icons-material/CardGiftcardRounded';
 import PersonAddAltRoundedIcon from '@mui/icons-material/PersonAddAltRounded';
-import { createAcademicOfficeUser, listAcademicOfficeUsers, type ManagedAcademicOfficeUser } from '../api/administration';
+import AccountBalanceWalletRoundedIcon from '@mui/icons-material/AccountBalanceWalletRounded';
+import { createAcademicOfficeUser, grantAdminTestCurrency, grantAdminTestItem, listAcademicOfficeUsers, listAdminTestStudents, type AdminTestStudent, type ManagedAcademicOfficeUser } from '../api/administration';
+import { listAdminCases, type AdminCase } from '../api/admin-cases';
 
 interface ApiErrorResponse {
   message?: string;
@@ -30,19 +37,33 @@ function getErrorMessage(error: unknown): string {
 
 export default function AdminManagementPage() {
   const [users, setUsers] = useState<ManagedAcademicOfficeUser[]>([]);
+  const [students, setStudents] = useState<AdminTestStudent[]>([]);
+  const [cases, setCases] = useState<AdminCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [granting, setGranting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [studentId, setStudentId] = useState('');
+  const [currencyAmount, setCurrencyAmount] = useState('');
+  const [rewardId, setRewardId] = useState('');
 
   async function loadUsers() {
     setLoading(true);
     setError('');
     try {
-      setUsers(await listAcademicOfficeUsers());
+      const [academicOfficeUsers, studentUsers, adminCases] = await Promise.all([
+        listAcademicOfficeUsers(),
+        listAdminTestStudents(),
+        listAdminCases(),
+      ]);
+      setUsers(academicOfficeUsers);
+      setStudents(studentUsers);
+      setCases(adminCases);
+      if (!studentId && studentUsers.length) setStudentId(studentUsers[0].id);
     } catch (loadError: unknown) {
       setError(getErrorMessage(loadError));
     } finally {
@@ -71,6 +92,41 @@ export default function AdminManagementPage() {
       setError(getErrorMessage(createError));
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleCurrencyGrant(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (granting || !studentId) return;
+    setGranting(true);
+    setError('');
+    setSuccess('');
+    try {
+      await grantAdminTestCurrency(studentId, Number(currencyAmount));
+      const student = students.find((item) => item.id === studentId);
+      setSuccess(`${Number(currencyAmount).toLocaleString('ru-RU')} жетонов выдано студенту ${student?.fullName ?? ''}.`);
+    } catch (grantError: unknown) {
+      setError(getErrorMessage(grantError));
+    } finally {
+      setGranting(false);
+    }
+  }
+
+  async function handleItemGrant(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (granting || !studentId || !rewardId) return;
+    setGranting(true);
+    setError('');
+    setSuccess('');
+    try {
+      await grantAdminTestItem(studentId, rewardId);
+      const reward = cases.flatMap((item) => item.rewards).find((item) => item.id === rewardId);
+      const student = students.find((item) => item.id === studentId);
+      setSuccess(`Предмет «${reward?.name ?? ''}» выдан студенту ${student?.fullName ?? ''}.`);
+    } catch (grantError: unknown) {
+      setError(getErrorMessage(grantError));
+    } finally {
+      setGranting(false);
     }
   }
 
@@ -135,6 +191,95 @@ export default function AdminManagementPage() {
                   <Chip size="small" color={user.active ? 'success' : 'default'} label={user.active ? 'Активна' : 'Отключена'} />
                 </Stack>
               ))}
+            </Stack>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card sx={{ mt: 2.5 }}>
+        <CardContent>
+          <Stack direction="row" spacing={1.25} alignItems="center" mb={1}>
+            <CardGiftcardRoundedIcon color="primary" />
+            <Typography variant="h6" fontWeight={750}>Тестовая выдача</Typography>
+          </Stack>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            Временный инструмент для проверки студенческих аккаунтов. Выданные жетоны и предметы попадут в настоящий баланс и инвентарь выбранного студента.
+          </Alert>
+          {loading ? <CircularProgress size={24} aria-label="Загрузка списка студентов и наград" /> : (
+            <Stack spacing={2.5}>
+              <FormControl fullWidth required disabled={!students.length || granting}>
+                <InputLabel id="test-grant-student-label">Студент</InputLabel>
+                <Select
+                  labelId="test-grant-student-label"
+                  label="Студент"
+                  value={studentId}
+                  onChange={(event) => setStudentId(event.target.value)}
+                >
+                  {students.map((student) => (
+                    <MenuItem key={student.id} value={student.id}>
+                      {student.fullName} · {student.email}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              {!students.length && <Typography color="text.secondary">Нет доступных студенческих аккаунтов для тестирования.</Typography>}
+              <Box component="form" onSubmit={(event) => void handleCurrencyGrant(event)}>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'flex-start' }}>
+                  <TextField
+                    label="Количество жетонов"
+                    type="number"
+                    value={currencyAmount}
+                    onChange={(event) => setCurrencyAmount(event.target.value)}
+                    inputProps={{ min: 0.01, step: 0.01, max: 99999999999999999 }}
+                    required
+                    fullWidth
+                    disabled={granting || !students.length}
+                  />
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    disabled={granting || !studentId || !currencyAmount || Number(currencyAmount) <= 0}
+                    startIcon={granting ? <CircularProgress size={18} color="inherit" /> : <AccountBalanceWalletRoundedIcon />}
+                    sx={{ minWidth: { sm: 190 }, minHeight: 56 }}
+                  >
+                    Выдать жетоны
+                  </Button>
+                </Stack>
+              </Box>
+              <Divider />
+              <Box component="form" onSubmit={(event) => void handleItemGrant(event)}>
+                <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ md: 'flex-start' }}>
+                  <FormControl fullWidth required disabled={!students.length || granting || !cases.some((item) => item.active && item.rewards.length)}>
+                    <InputLabel id="test-grant-item-label">Предмет из каталога наград</InputLabel>
+                    <Select
+                      labelId="test-grant-item-label"
+                      label="Предмет из каталога наград"
+                      value={rewardId}
+                      onChange={(event) => setRewardId(event.target.value)}
+                    >
+                      {cases.filter((item) => item.active).flatMap((adminCase) => adminCase.rewards.map((reward) => (
+                        <MenuItem key={reward.id} value={reward.id}>
+                          {reward.name} · {reward.rarity} · {adminCase.name}
+                        </MenuItem>
+                      )))}
+                    </Select>
+                  </FormControl>
+                  <Button
+                    type="submit"
+                    variant="outlined"
+                    disabled={granting || !studentId || !rewardId}
+                    startIcon={granting ? <CircularProgress size={18} /> : <CardGiftcardRoundedIcon />}
+                    sx={{ minWidth: { md: 190 }, minHeight: 56 }}
+                  >
+                    Выдать предмет
+                  </Button>
+                </Stack>
+                {!cases.some((item) => item.active && item.rewards.length) && (
+                  <Typography variant="body2" color="text.secondary" mt={1}>
+                    Сначала добавьте предметы в активный кейс в разделе «Кейсы и награды».
+                  </Typography>
+                )}
+              </Box>
             </Stack>
           )}
         </CardContent>

@@ -46,11 +46,12 @@ public class WorkspaceTaskController {
 		return service.listStudentTasks(principal);
 	}
 
-	@PostMapping("/teacher/tasks")
+	@PostMapping(path = "/teacher/tasks", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	@PreAuthorize("hasRole('TEACHER')")
 	public ResponseEntity<TaskResponse> createTask(@AuthenticationPrincipal UserPrincipal principal,
-			@Valid @RequestBody CreateTaskRequest request) {
-		return ResponseEntity.status(201).body(service.createTask(principal, request));
+			@Valid @RequestPart("request") CreateTaskRequest request,
+			@RequestPart(required = false) MultipartFile file) {
+		return ResponseEntity.status(201).body(service.createTask(principal, request, file));
 	}
 
 	@GetMapping("/teacher/tasks")
@@ -90,6 +91,25 @@ public class WorkspaceTaskController {
 	public ResponseEntity<byte[]> downloadAttachment(@AuthenticationPrincipal UserPrincipal principal,
 			@PathVariable UUID submissionId) {
 		WorkspaceTaskService.Attachment attachment = service.attachment(principal, submissionId);
+		MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
+		if (attachment.contentType() != null) {
+			try {
+				mediaType = MediaType.parseMediaType(attachment.contentType());
+			} catch (IllegalArgumentException ignored) {
+				mediaType = MediaType.APPLICATION_OCTET_STREAM;
+			}
+		}
+		return ResponseEntity.ok()
+				.contentType(mediaType)
+				.header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+						.filename(attachment.fileName(), StandardCharsets.UTF_8).build().toString())
+				.body(attachment.data());
+	}
+
+	@GetMapping("/tasks/{taskId}/attachment")
+	public ResponseEntity<byte[]> downloadTaskAttachment(@AuthenticationPrincipal UserPrincipal principal,
+			@PathVariable UUID taskId) {
+		WorkspaceTaskService.Attachment attachment = service.taskAttachment(principal, taskId);
 		MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
 		if (attachment.contentType() != null) {
 			try {

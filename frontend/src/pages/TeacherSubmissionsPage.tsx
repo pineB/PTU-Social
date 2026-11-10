@@ -14,19 +14,13 @@ import {
   DialogContentText,
   DialogTitle,
   FormControlLabel,
-  IconButton,
   MenuItem,
   Radio,
   RadioGroup,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
+  Tab,
+  Tabs,
   TextField,
-  Tooltip,
   Typography,
 } from '@mui/material';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
@@ -91,6 +85,7 @@ export default function TeacherSubmissionsPage() {
   const [selectedTeachingAssignment, setSelectedTeachingAssignment] = useState('');
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
+  const [taskFile, setTaskFile] = useState<File | null>(null);
   const [taskDueAt, setTaskDueAt] = useState('');
   const [taskMaxPoints, setTaskMaxPoints] = useState('100');
   const [allowLateSubmission, setAllowLateSubmission] = useState(false);
@@ -135,10 +130,11 @@ export default function TeacherSubmissionsPage() {
         dueAt: new Date(taskDueAt).toISOString(),
         maxPoints: Number(taskMaxPoints),
         allowLateSubmission,
-      });
+      }, taskFile ?? undefined);
       setCreateDialogOpen(false);
       setTaskTitle('');
       setTaskDescription('');
+      setTaskFile(null);
       setTaskDueAt('');
       setTaskMaxPoints('100');
       setAllowLateSubmission(false);
@@ -221,100 +217,72 @@ export default function TeacherSubmissionsPage() {
           {!isDataLoading && !dataError && teachingAssignments.length === 0 && (
             <Alert severity="info" sx={{ mb: 2 }}>Для создания задания преподавателю нужно назначить группу и дисциплину.</Alert>
           )}
-          <Stack direction="row" spacing={1} className="task-filters">
-            {([
-              ['submitted', 'На проверке'],
-              ['all', 'Все работы'],
-              ['in_progress', 'В процессе'],
-              ['accepted', 'Принято'],
-            ] as const).map(([value, label]) => (
-              <Button key={value} size="small" variant={filter === value ? 'contained' : 'outlined'} color={filter === value ? 'primary' : 'inherit'} onClick={() => setFilter(value)}>
-                {label}
-              </Button>
-            ))}
+          <Tabs value={filter} onChange={(_, value: 'all' | ReviewStatus) => setFilter(value)} variant="scrollable" scrollButtons="auto" aria-label="Фильтр сдач">
+            <Tab value="submitted" label={`На проверке${pendingCount ? ` · ${pendingCount}` : ''}`} />
+            <Tab value="all" label="Все работы" />
+            <Tab value="in_progress" label="На доработке" />
+            <Tab value="accepted" label="Принято" />
+          </Tabs>
+          <Stack spacing={1.5} mt={2}>
+            {visibleSubmissions.map((submission) => {
+              const isPending = submission.status === 'submitted';
+              const busy = busySubmissionId === submission.id;
+              const attachmentUrl = submission.attachmentUrl;
+              const fileName = submission.fileName;
+              return (
+                <Card variant="outlined" className="submission-review-card" key={submission.id}>
+                  <CardContent>
+                    <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'flex-start' }} gap={1.5}>
+                      <Box minWidth={0}>
+                        <Typography fontWeight={750}>{submission.assignmentTitle}</Typography>
+                        <Typography variant="body2" color="text.secondary">{submission.subject} · {submission.group}</Typography>
+                      </Box>
+                      <Chip size="small" label={reviewStatusLabels[submission.status]} className={`assignment-status assignment-status-${submission.status}`} />
+                    </Stack>
+                    <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} gap={1.5} mt={1.5}>
+                      <Box minWidth={0}>
+                        <Typography fontWeight={650}>{submission.studentName}</Typography>
+                        <Typography variant="caption" color="text.secondary">{formatSubmittedAt(submission.submittedAt)}</Typography>
+                      </Box>
+                      {fileName && attachmentUrl && (
+                        <Chip
+                          size="small"
+                          icon={<AttachFileRoundedIcon />}
+                          label={fileName}
+                          onClick={() => void downloadWorkspaceAttachment(attachmentUrl, fileName)}
+                          className="attached-file-chip submission-review-file"
+                        />
+                      )}
+                      {submission.status === 'accepted' && (
+                        <Typography variant="caption" className="awarded-points">
+                          {submission.grade && `Оценка ${submission.grade} · `}+{submission.awardedPoints ?? 0} АР
+                        </Typography>
+                      )}
+                    </Stack>
+                    <Stack direction="row" flexWrap="wrap" gap={1} mt={1.5}>
+                      <Button size="small" variant="outlined" startIcon={<VisibilityRoundedIcon />} onClick={() => setReviewing(submission)} disabled={isLoading}>
+                        Посмотреть работу
+                      </Button>
+                      {isPending && (
+                        <>
+                          <Button size="small" color="inherit" startIcon={busy && isLoading ? <CircularProgress size={15} /> : <CloseRoundedIcon />} disabled={isLoading} onClick={() => { setReturnComment(''); setReturnTarget(submission); }}>
+                            Вернуть на доработку
+                          </Button>
+                          <Button size="small" variant="contained" startIcon={<CheckRoundedIcon />} disabled={isLoading} onClick={() => { setSelectedGrade(''); setAcceptComment(''); setGradeTarget(submission); }}>
+                            Принять
+                          </Button>
+                        </>
+                      )}
+                      {submission.status === 'in_progress' && submission.returnComment && (
+                        <Typography variant="caption" color="text.secondary" alignSelf="center">Ожидает повторной сдачи</Typography>
+                      )}
+                    </Stack>
+                  </CardContent>
+                </Card>
+              );
+            })}
+            {visibleSubmissions.length === 0 && <Typography color="text.secondary" textAlign="center" py={3}>Работ в этой категории пока нет.</Typography>}
           </Stack>
-
-          <TableContainer>
-            <Table aria-label="Сдачи студентов">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Студент</TableCell>
-                  <TableCell>Задание</TableCell>
-                  <TableCell>Файл</TableCell>
-                  <TableCell>Дата сдачи</TableCell>
-                  <TableCell>Статус</TableCell>
-                  <TableCell align="right">Действия</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {visibleSubmissions.map((submission) => {
-                  const isPending = submission.status === 'submitted';
-                  const busy = busySubmissionId === submission.id;
-                  return (
-                    <TableRow hover key={submission.id}>
-                      <TableCell>
-                        <Typography fontSize={13} fontWeight={650}>{submission.studentName}</Typography>
-                        <Typography variant="caption" color="text.secondary">{submission.group}</Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography fontSize={13} fontWeight={600}>{submission.assignmentTitle}</Typography>
-                        <Typography variant="caption" color="text.secondary">{submission.subject}</Typography>
-                      </TableCell>
-                      <TableCell className="submission-file-cell">
-                        {submission.fileName
-                          ? <Chip
-                              size="small"
-                              icon={<AttachFileRoundedIcon />}
-                              label={submission.fileName}
-                              onClick={() => submission.attachmentUrl && void downloadWorkspaceAttachment(submission.attachmentUrl, submission.fileName ?? 'work')}
-                              className="attached-file-chip"
-                            />
-                          : <Typography variant="caption" color="text.secondary">Без файла</Typography>}
-                      </TableCell>
-                      <TableCell>{formatSubmittedAt(submission.submittedAt)}</TableCell>
-                      <TableCell className="submission-status-cell">
-                        <Stack direction="row" alignItems="center" spacing={1} className="submission-status-content">
-                          <Chip size="small" label={reviewStatusLabels[submission.status]} className={`assignment-status assignment-status-${submission.status}`} />
-                          {submission.status === 'accepted' && (
-                            <Typography variant="caption" className="awarded-points">
-                              {submission.grade && `Оценка ${submission.grade} · `}+{submission.awardedPoints ?? 0} АР
-                            </Typography>
-                          )}
-                        </Stack>
-                      </TableCell>
-                      <TableCell align="right">
-                        <Stack direction="row" justifyContent="flex-end" spacing={0.5}>
-                          <Tooltip title="Посмотреть работу">
-                            <span>
-                              <IconButton aria-label={`Посмотреть работу: ${submission.studentName}`} onClick={() => setReviewing(submission)} disabled={isLoading}>
-                                <VisibilityRoundedIcon fontSize="small" />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                          {isPending && (
-                            <>
-                              <Button size="small" color="inherit" startIcon={busy && isLoading ? <CircularProgress size={15} /> : <CloseRoundedIcon />} disabled={isLoading} onClick={() => { setReturnComment(''); setReturnTarget(submission); }}>
-                                Вернуть
-                              </Button>
-                              <Button size="small" variant="contained" startIcon={<CheckRoundedIcon />} disabled={isLoading} onClick={() => { setSelectedGrade(''); setAcceptComment(''); setGradeTarget(submission); }}>
-                                Принять
-                              </Button>
-                            </>
-                          )}
-                          {submission.status === 'in_progress' && submission.returnComment && (
-                            <Typography variant="caption" color="text.secondary">На доработке</Typography>
-                          )}
-                        </Stack>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {visibleSubmissions.length === 0 && (
-                  <TableRow><TableCell colSpan={6} align="center"><Typography color="text.secondary" py={3}>Работ в этой категории нет.</Typography></TableCell></TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
         </CardContent>
       </Card>
 
@@ -354,6 +322,31 @@ export default function TeacherSubmissionsPage() {
                 required
                 fullWidth
               />
+              <Button component="label" variant="outlined" startIcon={<AttachFileRoundedIcon />} disabled={isCreatingTask}>
+                {taskFile ? 'Заменить файл задания' : 'Прикрепить файл к заданию'}
+                <input
+                  type="file"
+                  hidden
+                  accept=".pdf,.doc,.docx,.zip,.txt,.png,.jpg,.jpeg"
+                  onChange={(event) => {
+                    const selectedFile = event.target.files?.[0] ?? null;
+                    if (selectedFile && selectedFile.size > 20 * 1024 * 1024) {
+                      setTaskFile(null);
+                      setCreateTaskError('Файл не должен превышать 20 МБ.');
+                      event.target.value = '';
+                      return;
+                    }
+                    setCreateTaskError('');
+                    setTaskFile(selectedFile);
+                  }}
+                />
+              </Button>
+              {taskFile && (
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Chip size="small" icon={<AttachFileRoundedIcon />} label={taskFile.name} />
+                  <Button size="small" color="error" onClick={() => setTaskFile(null)}>Убрать файл</Button>
+                </Stack>
+              )}
               <TextField
                 label="Срок сдачи"
                 type="datetime-local"
@@ -416,12 +409,14 @@ export default function TeacherSubmissionsPage() {
         <DialogActions><Button onClick={() => setReviewing(null)}>Закрыть</Button></DialogActions>
       </Dialog>
 
-      <Dialog open={gradeTarget !== null} onClose={() => { if (!isLoading) setGradeTarget(null); }} fullWidth maxWidth="xs">
+      <Dialog open={gradeTarget !== null} onClose={() => { if (!isLoading) setGradeTarget(null); }} fullWidth maxWidth="sm">
         <Box component="form" onSubmit={handleAccept}>
-          <DialogTitle>Принять работу</DialogTitle>
+          <DialogTitle>Проверка работы</DialogTitle>
           <DialogContent>
-            <DialogContentText mb={2}>
-              {gradeTarget?.studentName} · {gradeTarget?.assignmentTitle}
+            <DialogContentText mb={2} className="grade-submission-summary">
+              <strong>{gradeTarget?.studentName}</strong>
+              <br />
+              {gradeTarget?.assignmentTitle} · {gradeTarget?.group}
             </DialogContentText>
             <RadioGroup
               aria-label="Оценка"

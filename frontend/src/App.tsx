@@ -30,6 +30,7 @@ import {
   InventoryPage,
   ScheduleManagementPage,
   StudentSchedulePage,
+  TeacherSchedulePage,
   TeacherStudentsPage,
   WalletPage,
 } from './pages/CampusPages';
@@ -37,7 +38,9 @@ import type { HttpErrorNotice } from './types/events';
 import { useAuth } from './auth/AuthProvider';
 import type { UserRole } from './api/auth';
 import AdminManagementPage from './pages/AdminManagementPage';
+import AdminPassPage from './pages/AdminPassPage';
 import AcademicManagementPage from './pages/AcademicManagementPage';
+import AdminCasesPage from './pages/AdminCasesPage';
 
 const roleHomePaths: Record<UserRole, string> = {
   STUDENT: '/student',
@@ -104,6 +107,7 @@ export default function App() {
                 <Route path="teacher" element={<TeacherDashboard />} />
                 <Route path="teacher/submissions" element={<TeacherSubmissionsPage />} />
                 <Route path="teacher/students" element={<TeacherStudentsPage />} />
+                <Route path="teacher/schedule" element={<TeacherSchedulePage />} />
                 <Route path="teacher/events" element={<EventManagementPage />} />
               </Route>
               <Route element={<RequireRole role="ORGANIZER" />}>
@@ -118,6 +122,8 @@ export default function App() {
               </Route>
               <Route element={<RequireRole role="ADMIN" />}>
                 <Route path="admin" element={<AdminManagementPage />} />
+                <Route path="admin/pass" element={<AdminPassPage />} />
+                <Route path="admin/cases" element={<AdminCasesPage />} />
               </Route>
               <Route path="*" element={<HomeRedirect />} />
             </Route>

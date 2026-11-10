@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   Alert,
   AppBar,
@@ -41,6 +41,8 @@ import EmojiEventsRoundedIcon from '@mui/icons-material/EmojiEventsRounded';
 import LeaderboardRoundedIcon from '@mui/icons-material/LeaderboardRounded';
 import ExitToAppRoundedIcon from '@mui/icons-material/ExitToAppRounded';
 import AdminPanelSettingsRoundedIcon from '@mui/icons-material/AdminPanelSettingsRounded';
+import CardGiftcardRoundedIcon from '@mui/icons-material/CardGiftcardRounded';
+import RedeemRoundedIcon from '@mui/icons-material/RedeemRounded';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { dashboards, type RoleId } from '../data/dashboards';
 import { useCampusWorkflow } from '../data/campus-workflow';
@@ -106,6 +108,19 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
         {role === 'teacher' && (
           <ListItemButton
             component={NavLink}
+            to="/teacher/schedule"
+            onClick={onNavigate}
+            className={`role-link${isActive('/teacher/schedule') ? ' role-link-active' : ''}`}
+            aria-label="Расписание"
+            aria-current={isActive('/teacher/schedule') ? 'page' : undefined}
+          >
+            <ListItemIcon className="role-icon"><CalendarMonthRoundedIcon /></ListItemIcon>
+            <ListItemText primary="Расписание" primaryTypographyProps={{ fontWeight: location.pathname === '/teacher/schedule' ? 700 : 600, fontSize: 14 }} />
+          </ListItemButton>
+        )}
+        {role === 'teacher' && (
+          <ListItemButton
+            component={NavLink}
             to="/teacher/students"
             onClick={onNavigate}
             className={`role-link${isActive('/teacher/students') ? ' role-link-active' : ''}`}
@@ -159,10 +174,20 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
           </>
         )}
         {role === 'admin' && (
-          <ListItemButton component={NavLink} to="/admin" onClick={onNavigate} className={`role-link${isActive('/admin') ? ' role-link-active' : ''}`} aria-label="Управление учебной частью" aria-current={isActive('/admin') ? 'page' : undefined}>
-            <ListItemIcon className="role-icon"><AdminPanelSettingsRoundedIcon /></ListItemIcon>
-            <ListItemText primary="Учётные записи" />
-          </ListItemButton>
+          <>
+            <ListItemButton component={NavLink} to="/admin" end onClick={onNavigate} className={`role-link${isActive('/admin') ? ' role-link-active' : ''}`} aria-label="Учётные записи" aria-current={isActive('/admin') ? 'page' : undefined}>
+              <ListItemIcon className="role-icon"><AdminPanelSettingsRoundedIcon /></ListItemIcon>
+              <ListItemText primary="Учётные записи" />
+            </ListItemButton>
+            <ListItemButton component={NavLink} to="/admin/pass" onClick={onNavigate} className={`role-link${isActive('/admin/pass') ? ' role-link-active' : ''}`} aria-label="Управление ПТУ-пассом" aria-current={isActive('/admin/pass') ? 'page' : undefined}>
+              <ListItemIcon className="role-icon"><CardGiftcardRoundedIcon /></ListItemIcon>
+              <ListItemText primary="ПТУ-пасс" />
+            </ListItemButton>
+            <ListItemButton component={NavLink} to="/admin/cases" onClick={onNavigate} className={`role-link${isActive('/admin/cases') ? ' role-link-active' : ''}`} aria-label="Кейсы и награды" aria-current={isActive('/admin/cases') ? 'page' : undefined}>
+              <ListItemIcon className="role-icon"><RedeemRoundedIcon /></ListItemIcon>
+              <ListItemText primary="Кейсы и награды" />
+            </ListItemButton>
+          </>
         )}
         {role === 'student' && (
           <>
@@ -174,10 +199,12 @@ function SidebarContent({ role, onNavigate }: { role: RoleId; onNavigate?: () =>
               <ListItemIcon className="role-icon"><EventAvailableRoundedIcon /></ListItemIcon>
               <ListItemText primary="Мероприятия" primaryTypographyProps={{ fontWeight: location.pathname === '/student/events' ? 700 : 600, fontSize: 14 }} />
             </ListItemButton>
-            <ListItemButton component={NavLink} to="/student/group-confirmation" onClick={onNavigate} className={`role-link${isActive('/student/group-confirmation') ? ' role-link-active' : ''}`} aria-label={isGroupLeader ? 'Заявки студентов группы' : 'Подтверждение учебной группы'} aria-current={isActive('/student/group-confirmation') ? 'page' : undefined}>
-              <ListItemIcon className="role-icon"><GroupsRoundedIcon /></ListItemIcon>
-              <ListItemText primary={isGroupLeader ? 'Заявки группы' : 'Подтвердить группу'} primaryTypographyProps={{ fontWeight: location.pathname === '/student/group-confirmation' ? 700 : 600, fontSize: 14 }} />
-            </ListItemButton>
+            {isGroupLeader && (
+              <ListItemButton component={NavLink} to="/student/group-confirmation" onClick={onNavigate} className={`role-link${isActive('/student/group-confirmation') ? ' role-link-active' : ''}`} aria-label="Заявки студентов группы" aria-current={isActive('/student/group-confirmation') ? 'page' : undefined}>
+                <ListItemIcon className="role-icon"><GroupsRoundedIcon /></ListItemIcon>
+                <ListItemText primary="Заявки группы" primaryTypographyProps={{ fontWeight: location.pathname === '/student/group-confirmation' ? 700 : 600, fontSize: 14 }} />
+              </ListItemButton>
+            )}
             <ListItemButton component={NavLink} to="/student/battle-pass" onClick={onNavigate} className={`role-link${isActive('/student/battle-pass') ? ' role-link-active' : ''}`} aria-label="ПТУ-пасс" aria-current={isActive('/student/battle-pass') ? 'page' : undefined}>
               <ListItemIcon className="role-icon"><SportsEsportsRoundedIcon /></ListItemIcon>
               <ListItemText primary="ПТУ-пасс" primaryTypographyProps={{ fontWeight: location.pathname === '/student/battle-pass' ? 700 : 600, fontSize: 14 }} />
@@ -219,7 +246,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { session, currentUser, profileError, logout } = useAuth();
-  const { walletBalance, isGroupLeader, groupConfirmations, events, scheduleChanges, error: campusError } = useCampusWorkflow();
+  const { walletBalance, isGroupLeader, groupConfirmations, events, scheduleChanges, refresh, error: campusError } = useCampusWorkflow();
   const role: RoleId = session?.role === 'TEACHER'
     ? 'teacher'
     : session?.role === 'ORGANIZER'
@@ -230,6 +257,21 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
           ? 'admin'
           : 'student';
   const profile = dashboards[role];
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
+  const notificationStorageKey = `ptu-social-read-notifications:${currentUser?.id ?? 'guest'}`;
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(notificationStorageKey);
+      setReadNotificationIds(saved ? JSON.parse(saved) as string[] : []);
+    } catch {
+      setReadNotificationIds([]);
+    }
+  }, [notificationStorageKey]);
+  useEffect(() => {
+    if (role !== 'teacher') return;
+    const timer = window.setInterval(() => { void refresh(); }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [refresh, role]);
   const profileName = currentUser?.fullName?.trim() || session?.email || 'Пользователь';
   const roleCaption = role === 'student' && currentUser?.groupName
     ? `${currentUser.groupName} · студент`
@@ -248,7 +290,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
     '/student/leaderboard': 'Таблица лидеров',
     '/student/tasks': 'Задания',
     '/student/events': 'Мероприятия',
-    '/student/group-confirmation': isGroupLeader ? 'Заявки студентов группы' : 'Подтверждение группы',
+    '/student/group-confirmation': 'Заявки студентов группы',
     '/student/wallet': 'Кошелёк',
     '/student/battle-pass': 'ПТУ-пасс',
     '/student/inventory': 'Инвентарь',
@@ -257,10 +299,13 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
     '/academic-office/management': 'Группы и преподаватели',
     '/teacher/submissions': 'Сдачи студентов',
     '/teacher/students': 'Мои студенты',
+    '/teacher/schedule': 'Расписание',
     '/teacher/events': 'Мероприятия и баллы',
     '/organizer/events': 'Мероприятия и баллы',
     '/academic-office/certificates': 'Заявления на справки',
     '/academic-office/schedule': 'Расписание занятий',
+    '/admin/pass': 'Управление ПТУ-пассом',
+    '/admin/cases': 'Кейсы и награды',
   };
   const pageTitle = pageTitles[location.pathname]
     ?? (location.pathname.startsWith('/student/people/') ? 'Профиль студента' : profile.title);
@@ -323,6 +368,15 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
       }
     }
   } else if (role === 'teacher') {
+    groupConfirmations.filter((confirmation) => confirmation.status === 'pending').forEach((confirmation) => {
+      notifications.push({
+        id: `group-request-${confirmation.id}`,
+        title: 'Новая заявка в учебную группу',
+        description: `${confirmation.studentName} · ${confirmation.group}`,
+        to: '/teacher/students',
+        icon: <GroupsRoundedIcon />,
+      });
+    });
     submissions.filter((submission) => submission.status === 'submitted').forEach((submission) => {
       notifications.push({
         id: `submission-${submission.id}`,
@@ -346,7 +400,13 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
       }
     });
   }
-  const visibleNotifications = notifications.slice(0, 6);
+  const unreadNotifications = notifications.filter((notification) => !readNotificationIds.includes(notification.id));
+  const visibleNotifications = unreadNotifications.slice(0, 6);
+  function markNotificationsRead(ids: string[]) {
+    const next = [...new Set([...readNotificationIds, ...ids])];
+    setReadNotificationIds(next);
+    window.localStorage.setItem(notificationStorageKey, JSON.stringify(next));
+  }
 
   return (
     <Box className="app-shell">
@@ -408,7 +468,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
               </Tooltip>
               <Tooltip title="Уведомления">
                 <IconButton
-                  aria-label={`Уведомления: ${notifications.length}`}
+                  aria-label={`Непрочитанные уведомления: ${unreadNotifications.length}`}
                   aria-controls={notificationAnchor ? 'header-notifications-menu' : undefined}
                   aria-haspopup="menu"
                   aria-expanded={notificationAnchor ? 'true' : undefined}
@@ -416,9 +476,9 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
                   className="notification-button"
                 >
                   <NotificationsNoneRoundedIcon />
-                  {notifications.length > 0 && (
+                  {unreadNotifications.length > 0 && (
                     <Box component="span" className="notification-count">
-                      {notifications.length > 9 ? '9+' : notifications.length}
+                      {unreadNotifications.length > 9 ? '9+' : unreadNotifications.length}
                     </Box>
                   )}
                 </IconButton>
@@ -467,7 +527,13 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
         >
           <Box className="notifications-menu-heading">
             <Typography fontWeight={750}>Уведомления</Typography>
-            <Typography variant="caption" color="text.secondary">{notifications.length}</Typography>
+            <Button
+              size="small"
+              disabled={unreadNotifications.length === 0}
+              onClick={() => markNotificationsRead(unreadNotifications.map((notification) => notification.id))}
+            >
+              Прочитать все
+            </Button>
           </Box>
           <Divider />
           {visibleNotifications.length > 0 ? visibleNotifications.map((notification) => (
@@ -475,7 +541,10 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
               key={notification.id}
               component={NavLink}
               to={notification.to}
-              onClick={() => setNotificationAnchor(null)}
+              onClick={() => {
+                markNotificationsRead([notification.id]);
+                setNotificationAnchor(null);
+              }}
               className="notification-menu-item"
             >
               <ListItemIcon>{notification.icon}</ListItemIcon>

@@ -21,10 +21,14 @@ public final class CampusRules {
     }
 
     public static int weightedIndex(List<Integer> weights, int ticket) {
+        return weightedIndex(weights, (long) ticket);
+    }
+
+    public static int weightedIndex(List<Integer> weights, long ticket) {
         if (weights == null || weights.isEmpty() || weights.stream().anyMatch(weight -> weight == null || weight <= 0)) {
             throw new IllegalArgumentException("Weights must be a non-empty list of positive values");
         }
-        int total = weights.stream().mapToInt(Integer::intValue).sum();
+        long total = weights.stream().mapToLong(Integer::longValue).sum();
         if (ticket < 0 || ticket >= total) {
             throw new IllegalArgumentException("Ticket is outside the total weight");
         }

@@ -49,7 +49,7 @@ interface TaskWorkflowContextValue {
   isLoading: boolean;
   error: string;
   submitAssignment: (assignmentId: string, workText: string, file?: File) => Promise<void>;
-  createAssignment: (request: CreateWorkspaceTaskRequest) => Promise<void>;
+  createAssignment: (request: CreateWorkspaceTaskRequest, file?: File) => Promise<void>;
   acceptSubmission: (submissionId: string, grade: TeacherGrade, comment: string) => Promise<void>;
   returnSubmission: (submissionId: string, comment: string) => Promise<void>;
 }
@@ -144,8 +144,8 @@ export function TaskWorkflowProvider({ children }: { children: ReactNode }) {
     setAssignments((current) => current.map((item) => item.id === assignmentId ? mapTask(updatedTask) : item));
   }, []);
 
-  const createAssignment = useCallback(async (request: CreateWorkspaceTaskRequest) => {
-    const task = await createWorkspaceTask(request);
+  const createAssignment = useCallback(async (request: CreateWorkspaceTaskRequest, file?: File) => {
+    const task = await createWorkspaceTask(request, file);
     setAssignments((current) => [...current, mapTask(task)].sort(
       (left, right) => Date.parse(left.dueAt) - Date.parse(right.dueAt),
     ));

@@ -44,7 +44,20 @@ public class CertificateRequestService {
 
 	@Transactional
 	public CertificateRequestView create(UserPrincipal principal, CreateCertificateRequest request) {
-		CertificateRequest entity = new CertificateRequest(users.getReferenceById(principal.id()), request.type());
+		String customTitle = request.customTitle() == null ? null : request.customTitle().trim();
+		String description = request.description() == null ? "" : request.description().trim();
+		if (request.type() == com.ptu.backend.certificate.domain.CertificateType.OTHER
+				&& (customTitle == null || customTitle.isEmpty())) {
+			throw ApiException.badRequest("Укажите название справки в поле «Свой вариант».");
+		}
+		if (description.length() > 2000) {
+			throw ApiException.badRequest("Описание не должно превышать 2000 символов.");
+		}
+		if (!List.of("PICKUP", "DIGITAL").contains(request.deliveryMethod())) {
+			throw ApiException.badRequest("Выберите способ получения справки.");
+		}
+		CertificateRequest entity = new CertificateRequest(users.getReferenceById(principal.id()), request.type(),
+				customTitle, description, request.deliveryMethod());
 		return CertificateRequestView.from(requests.saveAndFlush(entity), null);
 	}
 
@@ -65,18 +78,28 @@ public class CertificateRequestService {
 
 	@Transactional
 	public CertificateRequestView updateStatus(UUID id, UpdateCertificateStatusRequest request) {
-		CertificateStatus status = request.status();
-		if (status != CertificateStatus.APPROVED && status != CertificateStatus.REJECTED) {
-			throw ApiException.badRequest("Допустимы только статусы APPROVED и REJECTED");
-		}
+		CertificateStatus status = request.status() == CertificateStatus.APPROVED
+				? CertificateStatus.READY : request.status();
 		String reason = request.rejectionReason() == null ? null : request.rejectionReason().trim();
 		if (status == CertificateStatus.REJECTED && (reason == null || reason.isEmpty())) {
 			throw ApiException.badRequest("Причина отклонения обязательна");
 		}
 		CertificateRequest entity = requests.findWithStudentById(id)
 				.orElseThrow(() -> ApiException.notFound("Заявка не найдена"));
-		if (entity.getStatus() != CertificateStatus.PENDING) {
-			throw ApiException.conflict("Заявка уже обработана");
+		CertificateStatus previous = entity.getStatus();
+		boolean allowed = switch (status) {
+			case IN_PROGRESS -> previous == CertificateStatus.PENDING;
+			case READY -> previous == CertificateStatus.PENDING || previous == CertificateStatus.IN_PROGRESS;
+			case ISSUED -> previous == CertificateStatus.READY || previous == CertificateStatus.APPROVED;
+			case REJECTED -> previous == CertificateStatus.PENDING || previous == CertificateStatus.IN_PROGRESS
+					|| previous == CertificateStatus.READY;
+			case PENDING, APPROVED -> false;
+		};
+		if (!allowed) {
+			throw ApiException.conflict("Нельзя изменить статус: сначала обработайте заявку на предыдущем этапе.");
+		}
+		if (status == CertificateStatus.READY && !documents.existsById(id)) {
+			throw ApiException.badRequest("Перед отметкой «Ожидает выдачи» прикрепите PDF-файл справки.");
 		}
 		entity.setStatus(status);
 		entity.setRejectionReason(status == CertificateStatus.REJECTED ? reason : null);
@@ -90,8 +113,8 @@ public class CertificateRequestService {
 	public CertificateRequestView uploadDocument(UUID id, MultipartFile file) {
 		CertificateRequest entity = requests.findWithStudentById(id)
 				.orElseThrow(() -> ApiException.notFound("Заявка не найдена"));
-		if (entity.getStatus() == CertificateStatus.REJECTED) {
-			throw ApiException.conflict("К отклонённой заявке нельзя прикрепить справку");
+		if (entity.getStatus() == CertificateStatus.REJECTED || entity.getStatus() == CertificateStatus.ISSUED) {
+			throw ApiException.conflict("К завершённой заявке нельзя прикрепить справку");
 		}
 		if (file == null || file.isEmpty()) {
 			throw ApiException.badRequest("Выберите PDF-файл справки");
@@ -125,7 +148,10 @@ public class CertificateRequestService {
 		CertificateRequest entity = requests.findWithStudentById(id)
 				.orElseThrow(() -> ApiException.notFound("Заявка не найдена"));
 		if (principal.role() != Role.ACADEMIC_OFFICE) {
-			if (!entity.getStudent().getId().equals(principal.id()) || entity.getStatus() != CertificateStatus.APPROVED) {
+			if (!entity.getStudent().getId().equals(principal.id())
+					|| (entity.getStatus() != CertificateStatus.READY
+							&& entity.getStatus() != CertificateStatus.ISSUED
+							&& entity.getStatus() != CertificateStatus.APPROVED)) {
 				throw ApiException.forbidden("Нет доступа к файлу справки");
 			}
 		}

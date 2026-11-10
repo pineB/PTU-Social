@@ -37,6 +37,7 @@ public class WorkspaceTaskService {
 
 	private static final long MAX_ATTACHMENT_SIZE = 20L * 1024 * 1024;
 	private static final String ATTACHMENT_URL_TEMPLATE = "/api/workspace/submissions/%s/attachment";
+	private static final String TASK_ATTACHMENT_URL_TEMPLATE = "/api/workspace/tasks/%s/attachment";
 
 	private final WorkspaceTaskRepository tasks;
 	private final WorkspaceSubmissionRepository submissions;
@@ -109,7 +110,7 @@ public class WorkspaceTaskService {
 	}
 
 	@Transactional
-	public TaskResponse createTask(UserPrincipal principal, CreateTaskRequest request) {
+	public TaskResponse createTask(UserPrincipal principal, CreateTaskRequest request, MultipartFile attachment) {
 		requireRole(principal, Role.TEACHER);
 		Semester semester = currentSemester();
 		if (!teacherAssignments.existsByTeacherIdAndGroupIdAndDisciplineIdAndSemesterIdAndStatus(
@@ -134,6 +135,16 @@ public class WorkspaceTaskService {
 		task.setDueAt(request.dueAt());
 		task.setMaxPoints(request.maxPoints());
 		task.setAllowLateSubmission(request.allowLateSubmission());
+		if (attachment != null && !attachment.isEmpty()) {
+			validateAttachment(attachment);
+			try {
+				task.setAttachmentData(attachment.getBytes());
+			} catch (IOException exception) {
+				throw ApiException.badRequest("Не удалось прочитать прикреплённый файл.");
+			}
+			task.setAttachmentName(attachment.getOriginalFilename());
+			task.setAttachmentContentType(attachment.getContentType());
+		}
 		return toTaskResponse(tasks.save(task), null);
 	}
 
@@ -223,6 +234,7 @@ public class WorkspaceTaskService {
 			int lateDays = (int) Math.ceil(lateSeconds / 86_400.0);
 			int awardedPoints = academicRatingService.calculateAcademicRating(basePoints, lateDays);
 			submission.setAwardedRating(awardedPoints);
+			submission.setAwardedAt(Instant.now());
 			StudentProfile profile = studentProfiles.findByUserIdForUpdate(submission.getStudentId())
 					.orElseThrow(() -> ApiException.notFound("Профиль студента не найден."));
 			profile.setAcademicRating(profile.getAcademicRating() + awardedPoints);
@@ -255,6 +267,24 @@ public class WorkspaceTaskService {
 				submission.getAttachmentData());
 	}
 
+	@Transactional(readOnly = true)
+	public Attachment taskAttachment(UserPrincipal principal, UUID taskId) {
+		if (principal.role() != Role.STUDENT && principal.role() != Role.TEACHER) {
+			throw ApiException.forbidden("Нет доступа к этому вложению.");
+		}
+		WorkspaceTask task = tasks.findById(taskId).orElseThrow(() -> ApiException.notFound("Задание не найдено."));
+		if (principal.role() == Role.TEACHER && !task.getTeacherId().equals(principal.id())) {
+			throw ApiException.forbidden("Нет доступа к этому вложению.");
+		}
+		if (principal.role() == Role.STUDENT && !task.getGroupId().equals(studentProfile(principal.id()).getGroupId())) {
+			throw ApiException.forbidden("Нет доступа к этому вложению.");
+		}
+		if (task.getAttachmentData() == null || task.getAttachmentName() == null) {
+			throw ApiException.notFound("Файл к заданию не найден.");
+		}
+		return new Attachment(task.getAttachmentName(), task.getAttachmentContentType(), task.getAttachmentData());
+	}
+
 	private TaskResponse toTaskResponse(WorkspaceTask task, WorkspaceSubmission submission) {
 		User teacher = users.findById(task.getTeacherId())
 				.orElseThrow(() -> ApiException.notFound("Преподаватель не найден."));
@@ -270,6 +300,8 @@ public class WorkspaceTaskService {
 		}
 		String attachmentUrl = submission != null && submission.getAttachmentData() != null
 				? ATTACHMENT_URL_TEMPLATE.formatted(submission.getId()) : null;
+		String taskAttachmentUrl = task.getAttachmentData() == null
+				? null : TASK_ATTACHMENT_URL_TEMPLATE.formatted(task.getId());
 		return new TaskResponse(task.getId(), task.getTitle(),
 				disciplines.findById(task.getDisciplineId()).map(Discipline::getName).orElse(""),
 				teacher.getFullName(), task.getDueAt(), task.getMaxPoints(), task.getDescription(),
@@ -278,7 +310,8 @@ public class WorkspaceTaskService {
 				submission == null ? null : submission.getAttachmentName(),
 				submission == null ? null : submission.getTeacherFeedback(),
 				submission == null ? null : submission.getGrade(),
-				submission == null ? null : submission.getAwardedRating(), attachmentUrl);
+				submission == null ? null : submission.getAwardedRating(), attachmentUrl,
+				task.getAttachmentName(), taskAttachmentUrl);
 	}
 
 	private SubmissionResponse toSubmissionResponse(WorkspaceSubmission submission) {

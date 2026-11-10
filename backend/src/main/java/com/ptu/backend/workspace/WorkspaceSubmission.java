@@ -61,6 +61,9 @@ public class WorkspaceSubmission {
 	@Column(name = "awarded_rating")
 	private Integer awardedRating;
 
+	@Column(name = "awarded_at")
+	private Instant awardedAt;
+
 	@Column(name = "revision_count", nullable = false)
 	private int revisionCount;
 

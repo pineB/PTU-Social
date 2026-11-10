@@ -29,6 +29,7 @@ import {
   updateCampusScheduleTimeSlot as updateCampusScheduleTimeSlotRequest,
   updateGroupConfirmation,
   type ActivityAward,
+  type CampusCase,
   type CampusCaseReward,
   type CampusEvent,
   type CampusGroup,
@@ -78,12 +79,16 @@ interface CampusWorkflowValue {
   passExperience: number | null;
   premiumPassOwned: boolean | null;
   premiumPassPrice: number | null;
+  passSeasonName: string | null;
+  passStartsAt: string | null;
+  passEndsAt: string | null;
   passRewards: PassReward[];
   walletBalance: number | null;
   transactions: WalletTransaction[];
   inventory: InventoryItem[];
   caseOpeningPrice: number | null;
   campusCaseRewards: CampusCaseReward[];
+  campusCases: CampusCase[];
   scheduleEntries: ScheduleEntry[];
   scheduleChanges: ScheduleChange[];
   isLoading: boolean;
@@ -124,12 +129,16 @@ export function CampusWorkflowProvider({ children }: { children: ReactNode }) {
   const [passExperience, setPassExperience] = useState<number | null>(null);
   const [premiumPassOwned, setPremiumPassOwned] = useState<boolean | null>(null);
   const [premiumPassPrice, setPremiumPassPrice] = useState<number | null>(null);
+  const [passSeasonName, setPassSeasonName] = useState<string | null>(null);
+  const [passStartsAt, setPassStartsAt] = useState<string | null>(null);
+  const [passEndsAt, setPassEndsAt] = useState<string | null>(null);
   const [passRewards, setPassRewards] = useState<PassReward[]>([]);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [caseOpeningPrice, setCaseOpeningPrice] = useState<number | null>(null);
   const [campusCaseRewards, setCampusCaseRewards] = useState<CampusCaseReward[]>([]);
+  const [campusCases, setCampusCases] = useState<CampusCase[]>([]);
   const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([]);
   const [scheduleChanges, setScheduleChanges] = useState<ScheduleChange[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -145,12 +154,16 @@ export function CampusWorkflowProvider({ children }: { children: ReactNode }) {
       setPassExperience(null);
       setPremiumPassOwned(null);
       setPremiumPassPrice(null);
+      setPassSeasonName(null);
+      setPassStartsAt(null);
+      setPassEndsAt(null);
       setPassRewards([]);
       setWalletBalance(null);
       setTransactions([]);
       setInventory([]);
       setCaseOpeningPrice(null);
       setCampusCaseRewards([]);
+      setCampusCases([]);
       setScheduleEntries([]);
       setScheduleChanges([]);
       setError('');
@@ -178,6 +191,7 @@ export function CampusWorkflowProvider({ children }: { children: ReactNode }) {
           const catalog = await getCampusCatalog();
           setCampusCaseRewards(catalog.caseRewards);
           setCaseOpeningPrice(catalog.caseOpeningPrice);
+          setCampusCases(catalog.cases);
         }, () => undefined),
         ...(session.role === 'STUDENT' ? [
           load(getCampusScheduleChanges, setScheduleChanges),
@@ -192,6 +206,9 @@ export function CampusWorkflowProvider({ children }: { children: ReactNode }) {
             setPassExperience(pass.experience);
             setPremiumPassOwned(pass.premiumPassOwned);
             setPremiumPassPrice(pass.premiumPrice);
+            setPassSeasonName(pass.seasonName);
+            setPassStartsAt(pass.startsAt);
+            setPassEndsAt(pass.endsAt);
             setPassRewards(pass.rewards);
           }, () => undefined),
           load(getCampusInventory, setInventory),
@@ -269,12 +286,16 @@ export function CampusWorkflowProvider({ children }: { children: ReactNode }) {
     passExperience,
     premiumPassOwned,
     premiumPassPrice,
+    passSeasonName,
+    passStartsAt,
+    passEndsAt,
     passRewards,
     walletBalance,
     transactions,
     inventory,
     caseOpeningPrice,
     campusCaseRewards,
+    campusCases,
     scheduleEntries,
     scheduleChanges,
     isLoading,
@@ -315,8 +336,9 @@ export function CampusWorkflowProvider({ children }: { children: ReactNode }) {
     updateScheduleTimeSlot: (request) => runAndRefresh(() => updateCampusScheduleTimeSlotRequest(request)),
   }), [
     isGroupLeader, students, teacherGroups, campusGroups, groupLeaders, events, groupConfirmations, myGroupConfirmation, activityAwards,
-    currentUser, passExperience, premiumPassOwned, premiumPassPrice, passRewards, walletBalance, transactions,
-    inventory, caseOpeningPrice, campusCaseRewards, scheduleEntries, scheduleChanges, isLoading, error, refresh, runAndRefresh,
+    currentUser, passExperience, premiumPassOwned, premiumPassPrice, passSeasonName, passStartsAt, passEndsAt,
+    passRewards, walletBalance, transactions,
+    inventory, caseOpeningPrice, campusCaseRewards, campusCases, scheduleEntries, scheduleChanges, isLoading, error, refresh, runAndRefresh,
   ]);
 
   return <CampusWorkflowContext.Provider value={value}>{children}</CampusWorkflowContext.Provider>;

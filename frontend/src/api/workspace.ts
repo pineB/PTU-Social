@@ -21,6 +21,8 @@ export interface WorkspaceTask {
   grade: TeacherGrade | null;
   awardedPoints: number | null;
   attachmentUrl: string | null;
+  taskAttachmentName: string | null;
+  taskAttachmentUrl: string | null;
 }
 
 export interface WorkspaceSubmission {
@@ -77,8 +79,13 @@ export async function getTeachingAssignments(): Promise<TeachingAssignmentOption
   return response.data;
 }
 
-export async function createWorkspaceTask(request: CreateWorkspaceTaskRequest): Promise<WorkspaceTask> {
-  const response = await apiClient.post<WorkspaceTask>('/workspace/teacher/tasks', request);
+export async function createWorkspaceTask(request: CreateWorkspaceTaskRequest, file?: File): Promise<WorkspaceTask> {
+  const formData = new FormData();
+  formData.append('request', new Blob([JSON.stringify(request)], { type: 'application/json' }));
+  if (file) formData.append('file', file);
+  const response = await apiClient.post<WorkspaceTask>('/workspace/teacher/tasks', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return response.data;
 }
 

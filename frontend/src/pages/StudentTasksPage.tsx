@@ -112,7 +112,17 @@ function AssignmentSubmissionForm({ assignment, onClose }: { assignment: Assignm
           <input
             type="file"
             hidden
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+            onChange={(event) => {
+              const selectedFile = event.target.files?.[0] ?? null;
+              if (selectedFile && selectedFile.size > 20 * 1024 * 1024) {
+                setFile(null);
+                setError('Файл не должен превышать 20 МБ.');
+                event.target.value = '';
+                return;
+              }
+              setError('');
+              setFile(selectedFile);
+            }}
             accept=".pdf,.doc,.docx,.zip,.txt,.png,.jpg,.jpeg"
           />
         </Button>
@@ -134,6 +144,8 @@ function AssignmentSubmissionForm({ assignment, onClose }: { assignment: Assignm
 function AssignmentCard({ assignment }: { assignment: Assignment }) {
   const [showForm, setShowForm] = useState(false);
   const canSubmit = assignment.status === 'in_progress' || (assignment.status === 'overdue' && assignment.allowLateSubmission);
+  const taskAttachmentUrl = assignment.taskAttachmentUrl;
+  const taskAttachmentName = assignment.taskAttachmentName;
   const hasSubmittedWork = Boolean(assignment.workText || assignment.fileName);
   const feedback = assignment.teacherComment ?? assignment.returnComment;
 
@@ -155,6 +167,15 @@ function AssignmentCard({ assignment }: { assignment: Assignment }) {
           <Typography variant="overline" color="text.secondary">Задание</Typography>
           <Typography variant="body1" lineHeight={1.7}>{assignment.description}</Typography>
         </Box>
+        {taskAttachmentName && taskAttachmentUrl && (
+          <Chip
+            size="small"
+            icon={<AttachFileRoundedIcon />}
+            label={`Материалы: ${taskAttachmentName}`}
+            onClick={() => void downloadWorkspaceAttachment(taskAttachmentUrl, taskAttachmentName)}
+            className="attached-file-chip"
+          />
+        )}
 
         <Box className="assignment-meta">
           <Typography variant="caption" color="text.secondary">Срок: {formatDeadline(assignment.dueAt)}</Typography>

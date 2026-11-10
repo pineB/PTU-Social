@@ -38,6 +38,30 @@ public class AcademicManagementController {
 		return service.departments();
 	}
 
+	@PostMapping("/departments")
+	@ResponseStatus(HttpStatus.CREATED)
+	public CatalogItem createDepartment(@Valid @RequestBody CreateDepartmentRequest request) {
+		return service.createDepartment(request);
+	}
+
+	@DeleteMapping("/departments/{departmentId}")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void deleteDepartment(@PathVariable UUID departmentId) {
+		service.deleteDepartment(departmentId);
+	}
+
+	@GetMapping("/disciplines")
+	public List<DisciplineItem> allDisciplines() {
+		return service.allDisciplines();
+	}
+
+	@PostMapping("/departments/{departmentId}/disciplines")
+	@ResponseStatus(HttpStatus.CREATED)
+	public DisciplineItem createDiscipline(@PathVariable UUID departmentId,
+			@Valid @RequestBody CreateDisciplineRequest request) {
+		return service.createDiscipline(departmentId, request);
+	}
+
 	@PatchMapping("/departments/{departmentId}")
 	public CatalogItem renameDepartment(@PathVariable UUID departmentId,
 			@Valid @RequestBody RenameDepartmentRequest request) {
@@ -64,6 +88,12 @@ public class AcademicManagementController {
 	@GetMapping("/departments/{departmentId}/disciplines")
 	public List<CatalogItem> disciplines(@PathVariable UUID departmentId) {
 		return service.disciplines(departmentId);
+	}
+
+	@DeleteMapping("/disciplines/{disciplineId}")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void deleteDiscipline(@PathVariable UUID disciplineId) {
+		service.deleteDiscipline(disciplineId);
 	}
 
 	@GetMapping("/groups")
@@ -115,6 +145,9 @@ public class AcademicManagementController {
 	public record CatalogItem(UUID id, String name) {
 	}
 
+	public record DisciplineItem(UUID id, String name, UUID departmentId, String departmentName) {
+	}
+
 	public record ManagedGroup(UUID id, String name, UUID facultyId, String facultyName) {
 	}
 
@@ -132,7 +165,13 @@ public class AcademicManagementController {
 	public record CreateFacultyRequest(@NotBlank @Size(max = 255) String name) {
 	}
 
+	public record CreateDepartmentRequest(@NotBlank @Size(max = 255) String name) {
+	}
+
 	public record RenameDepartmentRequest(@NotBlank @Size(max = 255) String name) {
+	}
+
+	public record CreateDisciplineRequest(@NotBlank @Size(max = 255) String name) {
 	}
 
 	public record RenameGroupRequest(@NotBlank @Size(max = 255) String name) {

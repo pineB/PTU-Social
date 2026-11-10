@@ -8,12 +8,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ParticipationRewardService {
 
-    private final TeacherBudgetService teacherBudgetService;
     private final ParticipationRepository participationRepository;
 
-    public ParticipationRewardService(TeacherBudgetService teacherBudgetService,
-                                      ParticipationRepository participationRepository) {
-        this.teacherBudgetService = teacherBudgetService;
+    public ParticipationRewardService(ParticipationRepository participationRepository) {
         this.participationRepository = participationRepository;
     }
 
@@ -33,11 +30,8 @@ public class ParticipationRewardService {
             throw new IllegalStateException("Duplicate reward award for the same student and activity");
         }
 
-        BigDecimal boaAward = teacherBudgetService.calculateAwardAmount(activity.getRewardBoa(), boaPercent);
-        BigDecimal buaAward = teacherBudgetService.calculateAwardAmount(activity.getRewardBua(), buaPercent);
-        BigDecimal totalAward = boaAward.add(buaAward);
-
-        teacherBudgetService.awardPoints(activity.getTeacherId(), totalAward);
+        BigDecimal boaAward = calculateAwardAmount(activity.getRewardBoa(), boaPercent);
+        BigDecimal buaAward = calculateAwardAmount(activity.getRewardBua(), buaPercent);
 
         Participation participation = new Participation();
         participation.setActivityId(activity.getId());
@@ -46,5 +40,13 @@ public class ParticipationRewardService {
         participation.setPointsBua(buaAward);
         participation.setStatus(ParticipationStatus.ATTENDED);
         return participationRepository.save(participation);
+    }
+
+    private BigDecimal calculateAwardAmount(BigDecimal baseAmount, int percent) {
+        if (baseAmount == null || baseAmount.signum() < 0) {
+            throw new IllegalArgumentException("Base amount must be non-negative");
+        }
+        return baseAmount.multiply(BigDecimal.valueOf(percent))
+                .divide(BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP);
     }
 }

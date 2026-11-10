@@ -50,6 +50,15 @@ public class WorkspaceTask {
 	@Column(name = "allow_late_submission", nullable = false)
 	private boolean allowLateSubmission;
 
+	@Column(name = "attachment_name", length = 255)
+	private String attachmentName;
+
+	@Column(name = "attachment_content_type", length = 120)
+	private String attachmentContentType;
+
+	@Column(name = "attachment_data", columnDefinition = "bytea")
+	private byte[] attachmentData;
+
 	@Column(nullable = false)
 	private boolean archived;
 

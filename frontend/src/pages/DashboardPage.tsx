@@ -30,12 +30,12 @@ import { Link } from 'react-router-dom';
 import { useCampusWorkflow } from '../data/campus-workflow';
 import { useTaskWorkflow } from '../data/task-workflow';
 
-export default function DashboardPage({ data, focusOverride }: { data: DashboardData; focusOverride?: { label: string; title: string; description?: string; footnote?: string; progress?: number } }) {
+export default function DashboardPage({ data, focusOverride }: { data: DashboardData; focusOverride?: { label: string; title: string; description?: string; footnote?: string; progress?: number; action?: { href: string; label: string } } }) {
   const [search, setSearch] = useState('');
   const focus = focusOverride ?? {
     label: 'Обзор',
-    title: 'Данные пока недоступны',
-    description: 'Когда backend предоставит данные для этого раздела, они появятся здесь.',
+    title: 'Пока нет обновлений',
+    description: 'Здесь появятся ближайшие задачи и важные события.',
   };
   const filteredRows = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('ru');
@@ -128,7 +128,7 @@ export default function DashboardPage({ data, focusOverride }: { data: Dashboard
                     <TableRow>
                       <TableCell colSpan={3} align="center">
                         <Typography color="text.secondary" py={2}>
-                          {data.rows.length ? 'Ничего не найдено' : 'Данные из backend пока отсутствуют.'}
+                          {data.rows.length ? 'Ничего не найдено' : 'В этом разделе пока нет записей.'}
                         </Typography>
                       </TableCell>
                     </TableRow>
@@ -154,6 +154,11 @@ export default function DashboardPage({ data, focusOverride }: { data: Dashboard
               </Box>
             )}
             {'footnote' in focus && <Typography className="focus-footnote">{focus.footnote}</Typography>}
+            {'action' in focus && focus.action && (
+              <Button component={Link} to={focus.action.href} variant="outlined" sx={{ alignSelf: 'flex-start', mt: 1.5 }}>
+                {focus.action.label}
+              </Button>
+            )}
           </CardContent>
         </Card>
       </Box>
@@ -163,16 +168,26 @@ export default function DashboardPage({ data, focusOverride }: { data: Dashboard
 
 export function StudentDashboard() {
   const location = useLocation();
-  const { academicRating, boaPoints, buaPoints } = useCampusWorkflow();
+  const {
+    academicRating, boaPoints, buaPoints, passExperience, passSeasonName,
+    passStartsAt, passEndsAt, passRewards, isLoading,
+  } = useCampusWorkflow();
   const { assignments } = useTaskWorkflow();
   const routeState = location.state as { registrationSubmitted?: boolean } | null;
+  const passLevel = passExperience === null ? null : Math.min(50, Math.floor(passExperience / 20));
+  const passProgress = passExperience === null || passLevel === null
+    ? null
+    : passLevel >= 50 ? 20 : passExperience % 20;
+  const seasonDates = passStartsAt && passEndsAt
+    ? `${new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium' }).format(new Date(passStartsAt))} — ${new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium' }).format(new Date(passEndsAt))}`
+    : null;
   const data = {
     ...dashboards.student,
     metrics: [
       { label: 'Академический рейтинг', value: academicRating === null ? '—' : String(academicRating), detail: 'за текущий семестр', icon: AutoStoriesRoundedIcon, color: '#3569b8', background: '#e7f0fc' },
       { label: 'Учебная активность', value: buaPoints === null ? '—' : String(buaPoints), detail: 'БУА', icon: AssignmentTurnedInRoundedIcon, color: '#3569b8', background: '#e7f0fc' },
       { label: 'Общественная активность', value: boaPoints === null ? '—' : String(boaPoints), detail: 'БОА', icon: EventAvailableRoundedIcon, color: '#b8782b', background: '#fbf0df' },
-      { label: 'ПТУ-пасс', value: '—', detail: 'данные недоступны', icon: GroupsRoundedIcon, color: '#3569b8', background: '#e7f0fc' },
+      { label: 'ПТУ-пасс', value: passLevel === null ? '—' : `${passLevel} / 50`, detail: passSeasonName ?? 'Уровень сезона', icon: GroupsRoundedIcon, color: '#3569b8', background: '#e7f0fc' },
     ],
     rows: assignments.map((assignment) => ({
       subject: assignment.title,
@@ -183,8 +198,19 @@ export function StudentDashboard() {
   };
   const focus = {
     label: 'ПТУ-пасс',
-    title: 'Данные недоступны',
-    description: 'Информация о сезоне и уровнях пока не подключена к backend.',
+    title: passLevel === null
+      ? isLoading ? 'Загружаем данные сезона…' : 'Сезон пока недоступен'
+      : `${passSeasonName ?? 'ПТУ-пасс'} · уровень ${passLevel} / 50`,
+    description: passExperience === null
+      ? 'Информация о сезоне и наградах появится здесь.'
+      : passLevel !== null && passLevel >= 50
+        ? `Максимальный уровень достигнут · ${passExperience} АР`
+        : `${passExperience} АР · ещё ${20 - (passProgress ?? 0)} АР до следующего уровня`,
+    ...(passProgress === null ? {} : { progress: (passProgress / 20) * 100 }),
+    ...(passExperience === null ? {} : {
+      footnote: seasonDates ? `Сезон: ${seasonDates} · наград: ${passRewards.length}` : `Наград сезона: ${passRewards.length}`,
+    }),
+    action: { href: '/student/battle-pass', label: 'Открыть ПТУ-пасс' },
   };
   return (
     <>

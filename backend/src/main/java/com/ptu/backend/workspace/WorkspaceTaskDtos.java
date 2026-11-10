@@ -24,7 +24,8 @@ public final class WorkspaceTaskDtos {
 
 	public record TaskResponse(UUID id, String title, String subject, String teacher, Instant dueAt, int maxPoints,
 			String description, boolean allowLateSubmission, String status, Instant submittedAt, String workText,
-			String fileName, String teacherComment, Integer grade, Integer awardedPoints, String attachmentUrl) {
+			String fileName, String teacherComment, Integer grade, Integer awardedPoints, String attachmentUrl,
+			String taskAttachmentName, String taskAttachmentUrl) {
 	}
 
 	public record SubmissionResponse(UUID id, UUID assignmentId, String assignmentTitle, String subject,

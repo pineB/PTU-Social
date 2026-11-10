@@ -50,6 +50,15 @@ public class CertificateRequest {
 	@Column(name = "rejection_reason")
 	private String rejectionReason;
 
+	@Column(name = "custom_title", length = 120)
+	private String customTitle;
+
+	@Column(name = "description", nullable = false, columnDefinition = "text")
+	private String description;
+
+	@Column(name = "delivery_method", nullable = false, length = 24)
+	private String deliveryMethod;
+
 	@CreationTimestamp
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
@@ -58,9 +67,13 @@ public class CertificateRequest {
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt;
 
-	public CertificateRequest(User student, CertificateType type) {
+	public CertificateRequest(User student, CertificateType type, String customTitle, String description,
+			String deliveryMethod) {
 		this.student = student;
 		this.type = type;
+		this.customTitle = customTitle;
+		this.description = description;
+		this.deliveryMethod = deliveryMethod;
 		this.status = CertificateStatus.PENDING;
 	}
 }

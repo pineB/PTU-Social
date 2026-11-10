@@ -11,12 +11,16 @@ import {
   CircularProgress,
   Divider,
   FormControl,
+  IconButton,
   InputLabel,
   ListItemText,
   MenuItem,
   Select,
   Stack,
+  Tab,
+  Tabs,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
@@ -25,7 +29,7 @@ import GroupAddRoundedIcon from '@mui/icons-material/GroupAddRounded';
 import PersonAddAltRoundedIcon from '@mui/icons-material/PersonAddAltRounded';
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
-import { archiveTeacherAssignment, createAcademicFaculty, createManagedGroup, createTeacherAssignment, createTeacherInvite, deleteAcademicFaculty, deleteManagedGroup, getAcademicDepartments, getAcademicDisciplines, getAcademicFaculties, listManagedGroups, listManagedTeachers, renameAcademicDepartment, renameManagedGroup, setManagedTeacherActive, type CatalogItem, type ManagedGroup, type ManagedTeacher } from '../api/administration';
+import { archiveTeacherAssignment, createAcademicDepartment, createAcademicDiscipline, createAcademicFaculty, createManagedGroup, createTeacherAssignment, createTeacherInvite, deleteAcademicDepartment, deleteAcademicDiscipline, deleteAcademicFaculty, deleteManagedGroup, getAcademicDepartments, getAcademicDisciplines, getAcademicFaculties, listManagedGroups, listManagedTeachers, renameAcademicDepartment, renameManagedGroup, setManagedTeacherActive, type CatalogItem, type ManagedGroup, type ManagedTeacher } from '../api/administration';
 
 interface ApiErrorResponse {
   message?: string;
@@ -49,10 +53,14 @@ export default function AcademicManagementPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [managementTab, setManagementTab] = useState<'structure' | 'teachers'>('structure');
+  const [structureTab, setStructureTab] = useState<'groups' | 'faculties' | 'departments' | 'disciplines'>('groups');
 
   const [groupName, setGroupName] = useState('');
   const [facultyId, setFacultyId] = useState('');
   const [newFacultyName, setNewFacultyName] = useState('');
+  const [newDepartmentName, setNewDepartmentName] = useState('');
+  const [newDisciplineName, setNewDisciplineName] = useState('');
   const [renamedGroups, setRenamedGroups] = useState<Record<string, string>>({});
   const [renamedDepartments, setRenamedDepartments] = useState<Record<string, string>>({});
 
@@ -97,6 +105,8 @@ export default function AcademicManagementPage() {
 
   useEffect(() => {
     let active = true;
+    setInviteDisciplineIds([]);
+    setAssignmentDisciplineId('');
     if (!departmentId) {
       setDisciplines([]);
       return () => { active = false; };
@@ -158,7 +168,19 @@ export default function AcademicManagementPage() {
     }, 'Факультет создан.');
   }
 
+  async function handleCreateDepartment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await runAction(async () => {
+      const created = await createAcademicDepartment(newDepartmentName.trim());
+      setDepartments((current) => [...current, created].sort((a, b) => a.name.localeCompare(b.name, 'ru')));
+      setRenamedDepartments((current) => ({ ...current, [created.id]: created.name }));
+      setDepartmentId(created.id);
+      setNewDepartmentName('');
+    }, 'Кафедра создана.');
+  }
+
   async function handleDeleteFaculty(faculty: CatalogItem) {
+    if (!window.confirm(`Удалить факультет «${faculty.name}»? Удалить факультет с учебными группами нельзя.`)) return;
     await runAction(async () => {
       await deleteAcademicFaculty(faculty.id);
       setFaculties((current) => current.filter((item) => item.id !== faculty.id));
@@ -167,6 +189,7 @@ export default function AcademicManagementPage() {
   }
 
   async function handleDeleteGroup(group: ManagedGroup) {
+    if (!window.confirm(`Удалить учебную группу «${group.name}»?`)) return;
     await runAction(async () => {
       await deleteManagedGroup(group.id);
       setGroups((current) => current.filter((item) => item.id !== group.id));
@@ -205,6 +228,46 @@ export default function AcademicManagementPage() {
         .sort((a, b) => a.name.localeCompare(b.name, 'ru')));
       setRenamedDepartments((current) => ({ ...current, [updated.id]: updated.name }));
     }, 'Название кафедры сохранено.');
+  }
+
+  async function handleDeleteDepartment(department: CatalogItem) {
+    if (!window.confirm(`Удалить кафедру «${department.name}»? Удаление доступно, только если к кафедре не привязаны дисциплины или приглашения преподавателей.`)) return;
+    await runAction(async () => {
+      await deleteAcademicDepartment(department.id);
+      const remainingDepartments = departments.filter((item) => item.id !== department.id);
+      setDepartments(remainingDepartments);
+      setRenamedDepartments((current) => {
+        const next = { ...current };
+        delete next[department.id];
+        return next;
+      });
+      setDepartmentId((current) => current === department.id ? remainingDepartments[0]?.id ?? '' : current);
+    }, 'Кафедра удалена.');
+  }
+
+  async function handleCreateDiscipline(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!departmentId) {
+      setError('Сначала выберите кафедру.');
+      return;
+    }
+    await runAction(async () => {
+      const created = await createAcademicDiscipline(departmentId, newDisciplineName.trim());
+      if (created.departmentId === departmentId) {
+        setDisciplines((current) => [...current, created].sort((a, b) => a.name.localeCompare(b.name, 'ru')));
+      }
+      setNewDisciplineName('');
+    }, 'Дисциплина создана.');
+  }
+
+  async function handleDeleteDiscipline(discipline: CatalogItem) {
+    if (!window.confirm(`Удалить дисциплину «${discipline.name}»? Если она используется в назначениях, заданиях или расписании, удалить её не получится.`)) return;
+    await runAction(async () => {
+      await deleteAcademicDiscipline(discipline.id);
+      setDisciplines((current) => current.filter((item) => item.id !== discipline.id));
+      setInviteDisciplineIds((current) => current.filter((id) => id !== discipline.id));
+      setAssignmentDisciplineId((current) => current === discipline.id ? '' : current);
+    }, 'Дисциплина удалена.');
   }
 
   async function handleInviteTeacher(event: FormEvent<HTMLFormElement>) {
@@ -270,15 +333,39 @@ export default function AcademicManagementPage() {
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
 
-      <Box display="grid" gridTemplateColumns={{ xs: '1fr', xl: 'minmax(0, 0.9fr) minmax(0, 1.1fr)' }} gap={2.5}>
-        <Card>
+      <Tabs value={managementTab} onChange={(_, value: 'structure' | 'teachers') => setManagementTab(value)} aria-label="Разделы управления">
+        <Tab value="structure" label="Учебная структура" />
+        <Tab value="teachers" label="Преподаватели" />
+      </Tabs>
+      <Box display="grid" gridTemplateColumns="minmax(0, 1fr)" gap={2} mt={2}>
+        <Card sx={{ display: managementTab === 'structure' ? undefined : 'none' }}>
           <CardContent>
+            <Tabs
+              value={structureTab}
+              onChange={(_, value: 'groups' | 'faculties' | 'departments' | 'disciplines') => setStructureTab(value)}
+              variant="scrollable"
+              scrollButtons="auto"
+              aria-label="Управление учебной структурой"
+              sx={{ mb: 2 }}
+            >
+              <Tab value="groups" label={`Группы${groups.length ? ` · ${groups.length}` : ''}`} />
+              <Tab value="faculties" label={`Факультеты${faculties.length ? ` · ${faculties.length}` : ''}`} />
+              <Tab value="departments" label={`Кафедры${departments.length ? ` · ${departments.length}` : ''}`} />
+              <Tab value="disciplines" label={`Дисциплины${disciplines.length ? ` · ${disciplines.length}` : ''}`} />
+            </Tabs>
+            <Box sx={{ display: structureTab === 'groups' ? undefined : 'none', mt: 1 }}>
             <Stack direction="row" spacing={1.25} alignItems="center" mb={2}>
               <GroupAddRoundedIcon color="primary" />
-              <Typography variant="h6" fontWeight={750}>Учебные группы</Typography>
+              <Typography variant="h6" fontWeight={750}>Создание учебной группы</Typography>
             </Stack>
-            <Box component="form" onSubmit={(event) => void handleCreateGroup(event)}>
-              <Stack spacing={1.5}>
+            <Box
+              component="form"
+              onSubmit={(event) => void handleCreateGroup(event)}
+              display="grid"
+              gridTemplateColumns={{ xs: '1fr', sm: 'minmax(0, 1fr) minmax(0, 1fr) auto' }}
+              gap={1.5}
+              alignItems="start"
+            >
                 <TextField label="Название группы" value={groupName} onChange={(event) => setGroupName(event.target.value)} required fullWidth />
                 <FormControl fullWidth required>
                   <InputLabel id="group-faculty-label">Факультет</InputLabel>
@@ -287,10 +374,10 @@ export default function AcademicManagementPage() {
                   </Select>
                 </FormControl>
                 <Button type="submit" variant="contained" disabled={busy || !faculties.length} startIcon={busy ? <CircularProgress size={18} color="inherit" /> : <AddRoundedIcon />}>Создать группу</Button>
-              </Stack>
+            </Box>
             </Box>
 
-            <Divider sx={{ my: 2.5 }} />
+            <Box sx={{ display: structureTab === 'faculties' ? undefined : 'none', mt: 1 }}>
             <Typography variant="subtitle1" fontWeight={750} mb={1}>Факультеты</Typography>
             <Box component="form" onSubmit={(event) => void handleCreateFaculty(event)} display="grid" gridTemplateColumns={{ xs: '1fr', sm: 'minmax(0, 1fr) auto' }} gap={1} mb={2}>
               <TextField label="Название факультета" value={newFacultyName} onChange={(event) => setNewFacultyName(event.target.value)} required fullWidth />
@@ -302,9 +389,18 @@ export default function AcademicManagementPage() {
                 <Button aria-label={`Удалить факультет ${faculty.name}`} color="error" size="small" disabled={busy} onClick={() => void handleDeleteFaculty(faculty)} startIcon={<DeleteOutlineRoundedIcon />}>Удалить</Button>
               </Stack>
             ))}
+            {!faculties.length && <Typography color="text.secondary">Факультетов пока нет. Создайте первый, чтобы добавлять учебные группы.</Typography>}
+            </Box>
 
-            <Divider sx={{ my: 2.5 }} />
+            <Box sx={{ display: structureTab === 'departments' ? undefined : 'none', mt: 1 }}>
             <Typography variant="subtitle1" fontWeight={750} mb={1}>Кафедры</Typography>
+            <Typography variant="body2" color="text.secondary" mb={2}>
+              Удалить можно только кафедру без дисциплин и приглашений преподавателей.
+            </Typography>
+            <Box component="form" onSubmit={(event) => void handleCreateDepartment(event)} display="grid" gridTemplateColumns={{ xs: '1fr', sm: 'minmax(0, 1fr) auto' }} gap={1} mb={2}>
+              <TextField label="Название кафедры" value={newDepartmentName} onChange={(event) => setNewDepartmentName(event.target.value)} inputProps={{ maxLength: 255 }} required fullWidth />
+              <Button type="submit" variant="outlined" disabled={busy} startIcon={busy ? <CircularProgress size={18} /> : <AddRoundedIcon />}>Создать кафедру</Button>
+            </Box>
             {departments.length ? (
               <Stack spacing={1.25}>
                 {departments.map((department) => (
@@ -316,43 +412,150 @@ export default function AcademicManagementPage() {
                       onChange={(event) => setRenamedDepartments((current) => ({ ...current, [department.id]: event.target.value }))}
                       fullWidth
                     />
-                    <Button
-                      disabled={busy || !renamedDepartments[department.id]?.trim() || renamedDepartments[department.id] === department.name}
-                      onClick={() => void handleRenameDepartment(department.id)}
-                      startIcon={<SaveRoundedIcon />}
-                    >
-                      Сохранить
-                    </Button>
+                    <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                      <Tooltip title="Сохранить название">
+                        <span>
+                          <IconButton
+                            aria-label={`Сохранить название кафедры ${department.name}`}
+                            color="primary"
+                            disabled={busy || !renamedDepartments[department.id]?.trim() || renamedDepartments[department.id] === department.name}
+                            onClick={() => void handleRenameDepartment(department.id)}
+                          >
+                            <SaveRoundedIcon />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Tooltip title="Удалить кафедру">
+                        <span>
+                          <IconButton
+                            aria-label={`Удалить кафедру ${department.name}`}
+                            color="error"
+                            disabled={busy}
+                            onClick={() => void handleDeleteDepartment(department)}
+                          >
+                            <DeleteOutlineRoundedIcon />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Stack>
                   </Box>
                 ))}
               </Stack>
             ) : <Typography color="text.secondary">Кафедры не найдены.</Typography>}
+            </Box>
 
+            <Box sx={{ display: structureTab === 'disciplines' ? undefined : 'none', mt: 1 }}>
+            <Typography variant="h6" fontWeight={750} mb={0.75}>Дисциплины</Typography>
+            <Typography color="text.secondary" variant="body2" mb={2}>Добавляйте дисциплины на кафедру. Используемые в учебном процессе дисциплины нельзя удалить.</Typography>
+            <FormControl fullWidth sx={{ mb: 2 }} disabled={!departments.length}>
+              <InputLabel id="discipline-filter-department-label">Кафедра</InputLabel>
+              <Select
+                labelId="discipline-filter-department-label"
+                label="Кафедра"
+                value={departmentId}
+                onChange={(event) => setDepartmentId(event.target.value)}
+              >
+                {departments.map((department) => <MenuItem key={department.id} value={department.id}>{department.name}</MenuItem>)}
+              </Select>
+            </FormControl>
+            <Typography variant="subtitle1" fontWeight={750} mb={1}>Новая дисциплина</Typography>
+            <Box component="form" onSubmit={(event) => void handleCreateDiscipline(event)}>
+              <Stack spacing={1.25}>
+                <TextField
+                  label="Название дисциплины"
+                  value={newDisciplineName}
+                  onChange={(event) => setNewDisciplineName(event.target.value)}
+                  inputProps={{ maxLength: 255 }}
+                  required
+                  fullWidth
+                />
+                <Button type="submit" variant="outlined" disabled={busy || !departments.length} startIcon={busy ? <CircularProgress size={18} /> : <AddRoundedIcon />}>
+                  Добавить дисциплину
+                </Button>
+              </Stack>
+            </Box>
             <Divider sx={{ my: 2.5 }} />
+            {disciplinesLoading ? <CircularProgress size={24} aria-label="Загрузка дисциплин" /> : disciplines.length ? (
+              <Stack divider={<Divider flexItem />} spacing={0}>
+                {disciplines.map((discipline) => (
+                  <Stack key={discipline.id} direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }} justifyContent="space-between" py={1}>
+                    <Typography>{discipline.name}</Typography>
+                    <Button
+                      aria-label={`Удалить дисциплину ${discipline.name}`}
+                      color="error"
+                      size="small"
+                      disabled={busy}
+                      onClick={() => void handleDeleteDiscipline(discipline)}
+                      startIcon={<DeleteOutlineRoundedIcon />}
+                    >
+                      Удалить
+                    </Button>
+                  </Stack>
+                ))}
+              </Stack>
+            ) : <Typography color="text.secondary">{departmentId ? 'На этой кафедре пока нет дисциплин.' : 'Сначала создайте кафедру.'}</Typography>}
+            </Box>
+
+            <Box sx={{ display: structureTab === 'groups' ? undefined : 'none', mt: 3 }}>
             <Typography variant="subtitle1" fontWeight={750} mb={1}>Группы</Typography>
             {groups.length ? (
               <Stack spacing={1.5}>
                 {groups.map((group) => (
-                  <Box key={group.id} display="grid" gridTemplateColumns={{ xs: '1fr', sm: 'minmax(0, 1fr) auto' }} gap={1} alignItems="center">
-                    <Stack direction="row" spacing={1} alignItems="center" minWidth={0}>
+                  <Box
+                    key={group.id}
+                    display="grid"
+                    gridTemplateColumns={{ xs: '1fr', sm: 'minmax(0, 1fr) auto' }}
+                    gap={{ xs: 0.75, sm: 1.5 }}
+                    alignItems="center"
+                    sx={{ p: 1.5, border: 1, borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper' }}
+                  >
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={{ xs: 0.25, sm: 1 }} alignItems={{ sm: 'center' }} minWidth={0}>
                       <TextField
                         size="small"
-                        label={`${group.facultyName} · ${group.name}`}
+                        label="Название группы"
                         value={renamedGroups[group.id] ?? group.name}
                         onChange={(event) => setRenamedGroups((current) => ({ ...current, [group.id]: event.target.value }))}
                         fullWidth
                       />
-                      <Button aria-label={`Удалить группу ${group.name}`} color="error" disabled={busy} onClick={() => void handleDeleteGroup(group)}><DeleteOutlineRoundedIcon /></Button>
+                      <Typography variant="caption" color="text.secondary" sx={{ px: 0.25 }}>
+                        {group.facultyName}
+                      </Typography>
                     </Stack>
-                    <Button disabled={busy || !renamedGroups[group.id]?.trim() || renamedGroups[group.id] === group.name} onClick={() => void handleRenameGroup(group.id)} startIcon={<SaveRoundedIcon />}>Сохранить</Button>
+                    <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                      <Tooltip title="Сохранить название">
+                        <span>
+                          <IconButton
+                            aria-label={`Сохранить название группы ${group.name}`}
+                            color="primary"
+                            disabled={busy || !renamedGroups[group.id]?.trim() || renamedGroups[group.id] === group.name}
+                            onClick={() => void handleRenameGroup(group.id)}
+                          >
+                            <SaveRoundedIcon />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Tooltip title="Удалить группу">
+                        <span>
+                          <IconButton
+                            aria-label={`Удалить группу ${group.name}`}
+                            color="error"
+                            disabled={busy}
+                            onClick={() => void handleDeleteGroup(group)}
+                          >
+                            <DeleteOutlineRoundedIcon />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Stack>
                   </Box>
                 ))}
               </Stack>
             ) : <Typography color="text.secondary">Групп пока нет.</Typography>}
+            </Box>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card sx={{ display: managementTab === 'teachers' ? undefined : 'none' }}>
           <CardContent>
             <Stack direction="row" spacing={1.25} alignItems="center" mb={2}>
               <PersonAddAltRoundedIcon color="primary" />
@@ -366,8 +569,6 @@ export default function AcademicManagementPage() {
                   <InputLabel id="invite-department-label">Кафедра</InputLabel>
                   <Select labelId="invite-department-label" label="Кафедра" value={departmentId} onChange={(event) => {
                     setDepartmentId(event.target.value);
-                    setInviteDisciplineIds([]);
-                    setAssignmentDisciplineId('');
                   }}>
                     {departments.map((department) => <MenuItem key={department.id} value={department.id}>{department.name}</MenuItem>)}
                   </Select>
@@ -420,7 +621,7 @@ export default function AcademicManagementPage() {
         </Card>
       </Box>
 
-      <Card sx={{ mt: 2.5 }}>
+      <Card sx={{ mt: 2, display: managementTab === 'teachers' ? undefined : 'none' }}>
         <CardContent>
           <Typography variant="h6" fontWeight={750} mb={2}>Преподаватели и назначения</Typography>
           <Box component="form" onSubmit={(event) => void handleCreateAssignment(event)} display="grid" gridTemplateColumns={{ xs: '1fr', md: 'repeat(3, minmax(0, 1fr)) auto' }} gap={1.5} mb={2.5}>

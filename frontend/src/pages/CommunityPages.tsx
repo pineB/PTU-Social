@@ -75,9 +75,10 @@ function StudentLink({ student, children }: { student: CommunityStudent; childre
   );
 }
 
-function MetricPicker({ value, onChange }: {
+function MetricPicker({ value, onChange, includeAll = false }: {
   value: CommunityMetric | 'Все';
   onChange: (metric: CommunityMetric | 'Все') => void;
+  includeAll?: boolean;
 }) {
   return (
     <ToggleButtonGroup
@@ -88,7 +89,7 @@ function MetricPicker({ value, onChange }: {
       className="community-metric-picker"
       aria-label="Показатель рейтинга"
     >
-      {(['Все', 'АР', 'БОА', 'БУА'] as const).map((metric) => (
+      {(includeAll ? ['Все', 'АР', 'БОА', 'БУА'] as const : ['АР', 'БОА', 'БУА'] as const).map((metric) => (
         <ToggleButton key={metric} value={metric} aria-label={metric === 'Все' ? 'Все награды' : metricLabels[metric]}>{metric}</ToggleButton>
       ))}
     </ToggleButtonGroup>
@@ -143,7 +144,7 @@ export function AwardsFeedPage() {
     <Box className="community-page">
       <PageHeading title="Лента наград" />
       <Box className="community-filters" aria-label="Фильтры ленты наград">
-        <MetricPicker value={metric} onChange={setMetric} />
+        <MetricPicker value={metric} includeAll onChange={setMetric} />
         <FilterSelect label="Группа" value={group} options={groups} onChange={setGroup} />
       </Box>
       {error && <Alert severity="error">{error}</Alert>}
@@ -205,6 +206,7 @@ export function LeaderboardPage() {
   }, []);
   const groups = ['Все группы', ...new Set(students.map((student) => student.group))];
   const leaders = useMemo(() => students
+    .filter((student) => metricValue(student, metric) > 0)
     .filter((student) => group === 'Все группы' || student.group === group)
     .sort((left, right) => metricValue(right, metric) - metricValue(left, metric)), [group, metric, students]);
 

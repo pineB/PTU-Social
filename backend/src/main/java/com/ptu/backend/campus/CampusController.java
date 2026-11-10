@@ -3,6 +3,7 @@ package com.ptu.backend.campus;
 import com.ptu.backend.campus.CampusDtos.*;
 import com.ptu.backend.common.security.UserPrincipal;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,9 +19,44 @@ public class CampusController {
         this.campus = campus;
     }
 
+    @GetMapping("/campus/profile/cosmetics")
+    public ProfileCosmeticsView profileCosmetics(@AuthenticationPrincipal UserPrincipal principal) {
+        return campus.profileCosmetics(principal);
+    }
+
+    @PutMapping("/campus/profile/cosmetics")
+    public ProfileCosmeticsView saveProfileCosmetics(@AuthenticationPrincipal UserPrincipal principal,
+                                                      @RequestBody SaveProfileCosmeticsRequest request) {
+        return campus.saveProfileCosmetics(principal, request);
+    }
+
+    @GetMapping("/campus/cases/{id}/image")
+    public ResponseEntity<byte[]> caseImage(@PathVariable long id) {
+        CaseImage image = campus.caseImage(id);
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType(image.contentType())).body(image.data());
+    }
+
+    @GetMapping("/campus/cases/{caseId}/rewards/{rewardId}/image")
+    public ResponseEntity<byte[]> caseRewardImage(@PathVariable long caseId, @PathVariable long rewardId) {
+        CaseImage image = campus.caseRewardImage(caseId, rewardId);
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType(image.contentType())).body(image.data());
+    }
+
+    @GetMapping("/campus/inventory/{id}/image")
+    public ResponseEntity<byte[]> inventoryImage(@AuthenticationPrincipal UserPrincipal principal,
+                                                 @PathVariable long id) {
+        CaseImage image = campus.inventoryImage(principal, id);
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType(image.contentType())).body(image.data());
+    }
+
     @GetMapping("/campus/events")
     public List<EventView> events(@AuthenticationPrincipal UserPrincipal principal) {
         return campus.events(principal);
+    }
+
+    @GetMapping("/campus/organizers/{organizerId}/reviews")
+    public List<OrganizerReviewView> organizerReviews(@PathVariable UUID organizerId) {
+        return campus.organizerReviews(organizerId);
     }
 
     @PostMapping("/campus/events")

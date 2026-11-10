@@ -15,6 +15,7 @@ export interface CampusEvent {
   maxPoints: number;
   createdBy: string;
   creatorId?: string;
+  rating: number | null;
   groupRegistrations: EventGroupRegistration[];
   participants: EventParticipant[];
   reviews: EventReview[];
@@ -27,6 +28,15 @@ export interface EventReview {
   rating: number;
   comment: string;
   status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+}
+
+export interface OrganizerReview {
+  id: string;
+  eventTitle: string;
+  studentName: string;
+  rating: number;
+  comment: string;
   createdAt: string;
 }
 
@@ -102,6 +112,8 @@ export interface InventoryItem {
   rarity?: 'Обычный' | 'Редкий' | 'Эпический';
   source: string;
   obtainedAt: string;
+  caseId: string;
+  imageUrl: string;
 }
 
 export interface CampusCaseReward {
@@ -109,6 +121,22 @@ export interface CampusCaseReward {
   cosmeticType: NonNullable<InventoryItem['cosmeticType']>;
   rarity: NonNullable<InventoryItem['rarity']>;
   chance: number;
+  imageUrl: string;
+}
+
+export interface CampusCase {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  imageUrl: string;
+  rewards: CampusCaseReward[];
+}
+
+export interface ProfileCosmetics {
+  avatarItemId: string | null;
+  frameItemId: string | null;
+  backgroundItemId: string | null;
 }
 
 export interface CampusGroup {
@@ -126,6 +154,7 @@ export interface ScheduleEntry {
   groupId: string;
   group: string;
   subject: string;
+  disciplineId: string | null;
   teacherId: string | null;
   teacher: string;
   room: string;
@@ -146,12 +175,16 @@ export interface PassReward {
   title: string;
   rewardKind: 'case' | 'cosmetic';
   claimed: boolean;
+  imageUrl: string | null;
 }
 
 export interface BattlePassSnapshot {
   experience: number;
   premiumPassOwned: boolean;
   premiumPrice: number;
+  seasonName: string;
+  startsAt: string;
+  endsAt: string;
   rewards: PassReward[];
 }
 
@@ -159,6 +192,7 @@ export interface CampusCatalog {
   groups: CampusGroup[];
   caseOpeningPrice: number;
   caseRewards: CampusCaseReward[];
+  cases: CampusCase[];
 }
 
 export interface CreateCampusEventRequest {
@@ -177,12 +211,32 @@ export interface CreateCampusEventRequest {
 
 export async function listCampusEvents(): Promise<CampusEvent[]> {
   const response = await apiClient.get<CampusEvent[]>('/campus/events');
+  return response.data.map(normalizeCampusEvent);
+}
+
+export async function listOrganizerReviews(organizerId: string): Promise<OrganizerReview[]> {
+  const response = await apiClient.get<OrganizerReview[]>(`/campus/organizers/${organizerId}/reviews`);
   return response.data;
 }
 
 export async function createCampusEvent(event: CreateCampusEventRequest): Promise<CampusEvent> {
-  const response = await apiClient.post<CampusEvent>('/campus/events', event);
-  return response.data;
+  const response = await apiClient.post<CampusEvent>('/campus/events', {
+    ...event,
+    date: new Date(event.date).toISOString(),
+    endsAt: new Date(event.endsAt).toISOString(),
+  });
+  return normalizeCampusEvent(response.data);
+}
+
+function normalizeCampusEvent(event: CampusEvent): CampusEvent {
+  const format = event.format.toLowerCase();
+  if (format !== 'group' && format !== 'individual') {
+    throw new Error('Не удалось определить формат мероприятия.');
+  }
+  return {
+    ...event,
+    format,
+  };
 }
 
 export async function joinCampusEvent(eventId: string): Promise<void> {
@@ -244,6 +298,16 @@ export async function requestCampusGroupMembership(): Promise<GroupConfirmation>
 
 export async function getCampusCatalog(): Promise<CampusCatalog> {
   const response = await apiClient.get<CampusCatalog>('/campus/catalog');
+  return response.data;
+}
+
+export async function getProfileCosmetics(): Promise<ProfileCosmetics> {
+  const response = await apiClient.get<ProfileCosmetics>('/campus/profile/cosmetics');
+  return response.data;
+}
+
+export async function saveProfileCosmetics(cosmetics: ProfileCosmetics): Promise<ProfileCosmetics> {
+  const response = await apiClient.put<ProfileCosmetics>('/campus/profile/cosmetics', cosmetics);
   return response.data;
 }
 

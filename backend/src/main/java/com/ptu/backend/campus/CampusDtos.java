@@ -38,6 +38,7 @@ public final class CampusDtos {
             int maxPoints,
             String creatorId,
             String createdBy,
+            BigDecimal rating,
             List<EventGroupRegistrationView> groupRegistrations,
             List<EventParticipantView> participants,
             List<EventReviewView> reviews) {
@@ -63,6 +64,10 @@ public final class CampusDtos {
 
     public record EventReviewView(
             String id, String studentId, String studentName, int rating, String comment, String status, String createdAt) {
+    }
+
+    public record OrganizerReviewView(
+            String id, String eventTitle, String studentName, int rating, String comment, String createdAt) {
     }
 
     public record GroupView(String id, String name, int size, String leaderId) {
@@ -100,30 +105,80 @@ public final class CampusDtos {
     public record WalletTransactionView(String id, String title, String detail, BigDecimal amount, String createdAt) {
     }
 
-    public record CampusCaseRewardView(String name, String cosmeticType, String rarity, int chance) {
+    public record CampusCaseRewardView(String name, String cosmeticType, String rarity, int chance,
+                                       String imageUrl) {
     }
 
-    public record CatalogView(List<GroupView> groups, BigDecimal caseOpeningPrice, List<CampusCaseRewardView> caseRewards) {
+    public record CampusCaseView(String id, String name, String description, BigDecimal price, String imageUrl,
+                                 List<CampusCaseRewardView> rewards) {
     }
 
-    public record PassRewardView(String id, String track, int level, String title, String rewardKind, boolean claimed) {
+    public record CatalogView(List<GroupView> groups, BigDecimal caseOpeningPrice,
+                              List<CampusCaseRewardView> caseRewards, List<CampusCaseView> cases) {
     }
 
-    public record PassView(int experience, boolean premiumPassOwned, BigDecimal premiumPrice, List<PassRewardView> rewards) {
+    public record PassRewardView(String id, String track, int level, String title, String rewardKind, boolean claimed,
+                                 String imageUrl) {
+    }
+
+    public record PassView(int experience, boolean premiumPassOwned, BigDecimal premiumPrice, String seasonName,
+                           String startsAt, String endsAt, List<PassRewardView> rewards) {
+    }
+
+    public record AdminPassView(String seasonId, String seasonName, String startsAt, String endsAt,
+                                BigDecimal premiumPrice, List<PassSeasonSummary> seasons,
+                                List<AdminPassRewardView> rewards, List<AdminCaseOption> cases) {
+    }
+
+    public record AdminCaseOption(String id, String name) {
+    }
+
+    public record PassSeasonSummary(String id, String seasonName, String startsAt, String endsAt,
+                                    BigDecimal premiumPrice, boolean active) {
+    }
+
+    public record AdminPassRewardView(String id, String track, int level, String title, String rewardKind,
+                                      String cosmeticType, String rarity, String caseId) {
+    }
+
+    public record SavePassSeasonRequest(String seasonName, String startsAt, String endsAt, BigDecimal premiumPrice) {
+    }
+
+    public record SavePassRewardRequest(String track, Integer level, String title, String rewardKind,
+                                        String cosmeticType, String rarity, String caseId) {
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record InventoryItemView(
-            String id, String name, String kind, String cosmeticType, String rarity, String source, String obtainedAt) {
+            String id, String name, String kind, String cosmeticType, String rarity, String source, String obtainedAt,
+            String caseId, String imageUrl) {
+    }
+
+    public record ProfileCosmeticsView(String avatarItemId, String frameItemId, String backgroundItemId) {
+    }
+
+    public record SaveProfileCosmeticsRequest(String avatarItemId, String frameItemId, String backgroundItemId) {
+    }
+
+    public record CaseImage(byte[] data, String contentType) {
+    }
+
+    public record AdminCaseRewardView(String id, String name, String cosmeticType, String rarity, int weight,
+                                      int chance, String imageUrl) {
+    }
+
+    public record AdminCaseView(String id, String name, String description, BigDecimal price, boolean active,
+                                String imageUrl, List<AdminCaseRewardView> rewards) {
     }
 
     public record ScheduleRequest(
-            String weekday, String startTime, String endTime, String groupId, String subject, String teacherId, String room) {
+            String weekday, String startTime, String endTime, String groupId, String disciplineId,
+            String teacherId, String room) {
     }
 
     public record ScheduleView(
             String id, String weekday, String startTime, String endTime, String groupId, String group, String subject,
-            String teacherId, String teacher, String room) {
+            String disciplineId, String teacherId, String teacher, String room) {
     }
 
     public record ScheduleChangeView(

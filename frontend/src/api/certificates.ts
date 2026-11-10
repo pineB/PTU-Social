@@ -1,13 +1,16 @@
 import apiClient from './client';
 
-export type CertificateType = 'EDUCATION' | 'INCOME' | 'MILITARY';
-export type CertificateStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type CertificateType = 'EDUCATION' | 'INCOME' | 'MILITARY' | 'OTHER';
+export type CertificateStatus = 'PENDING' | 'IN_PROGRESS' | 'READY' | 'APPROVED' | 'ISSUED' | 'REJECTED';
 
 export interface CertificateRequestView {
   id: string;
   studentId: string;
   studentName: string;
   type: CertificateType;
+  customTitle: string | null;
+  description: string;
+  deliveryMethod: 'PICKUP' | 'DIGITAL';
   status: CertificateStatus;
   rejectionReason: string | null;
   documentName: string | null;
@@ -36,8 +39,13 @@ export async function listCertificates(): Promise<CertificateRequestView[]> {
   return response.data.content;
 }
 
-export async function createCertificateRequest(type: CertificateType): Promise<CertificateRequestView> {
-  const response = await apiClient.post<CertificateRequestView>('/certificates', { type });
+export async function createCertificateRequest(request: {
+  type: CertificateType;
+  customTitle: string | null;
+  description: string;
+  deliveryMethod: 'PICKUP' | 'DIGITAL';
+}): Promise<CertificateRequestView> {
+  const response = await apiClient.post<CertificateRequestView>('/certificates', request);
   return response.data;
 }
 
@@ -60,7 +68,7 @@ export async function downloadCertificateDocument(id: string, fileName: string):
 
 export async function updateCertificateRequestStatus(
   id: string,
-  status: Exclude<CertificateStatus, 'PENDING'>,
+  status: Exclude<CertificateStatus, 'PENDING' | 'APPROVED'>,
   rejectionReason?: string,
 ): Promise<CertificateRequestView> {
   const response = await apiClient.patch<CertificateRequestView>(`/certificates/${id}/status`, {
