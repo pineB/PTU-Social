@@ -415,17 +415,17 @@ html[data-theme='dark'] .transaction-out { color: #e3a79f !important; background
 .battle-pass-progress .MuiLinearProgress-root { height: 9px; border-radius: 99px; background: var(--surface-muted); }
 .battle-pass-progress .MuiLinearProgress-bar { border-radius: 99px; background: var(--brand); }
 .battle-pass-layout { display: grid; grid-template-columns: 42px minmax(0, 1fr); align-items: stretch; gap: 8px; }
-.battle-pass-legend { position: sticky; left: 0; z-index: 2; display: grid; grid-template-rows: 34px minmax(0, 1fr) minmax(0, 1fr); gap: 9px; height: 330px; box-sizing: border-box; padding: 11px 0; background: var(--surface); }
+.battle-pass-legend { position: sticky; left: 0; z-index: 2; display: grid; grid-template-rows: 34px minmax(0, 1fr) minmax(0, 1fr); gap: 9px; height: 348px; box-sizing: border-box; padding: 11px 0; background: var(--surface); }
 .battle-pass-legend-lane { display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid color-mix(in srgb, currentColor 12%, transparent); border-radius: 11px; }
 .battle-pass-legend-lane .MuiTypography-root { font-size: 10px; line-height: 1; white-space: nowrap; writing-mode: vertical-rl; }
 .battle-pass-legend-free { color: var(--brand-strong); background: linear-gradient(145deg, color-mix(in srgb, var(--brand) 8%, var(--surface)), color-mix(in srgb, var(--brand) 16%, var(--surface))); }
 .battle-pass-legend-premium { color: var(--premium-text); background: linear-gradient(145deg, #fff8e9, var(--premium-soft)); }
 html[data-theme='dark'] .battle-pass-legend-premium { color: var(--premium-text); background: linear-gradient(145deg, #493e27, var(--premium-soft)); }
 .battle-pass-levels { display: flex; gap: 10px; min-width: 0; overflow-x: auto; padding: 4px 4px 14px; scroll-snap-type: x mandatory; scrollbar-color: var(--brand) var(--surface-muted); }
-.battle-pass-level { display: grid; flex: 0 0 142px; grid-template-rows: 34px minmax(0, 1fr) minmax(0, 1fr); align-content: stretch; gap: 9px; height: 330px; box-sizing: border-box; padding: 11px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); scroll-snap-align: start; }
+.battle-pass-level { display: grid; flex: 0 0 156px; grid-template-rows: 34px minmax(0, 1fr) minmax(0, 1fr); align-content: stretch; gap: 9px; height: 348px; box-sizing: border-box; padding: 10px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); scroll-snap-align: start; }
 .battle-pass-level-current { border-color: color-mix(in srgb, var(--brand) 55%, var(--border)); box-shadow: 0 5px 16px color-mix(in srgb, var(--brand) 14%, transparent); }
 .battle-pass-level > .MuiTypography-caption { display: flex; align-items: center; padding: 5px 7px; border-radius: 7px; background: var(--surface-muted); }
-.battle-pass-reward { display: grid; align-content: start; gap: 7px; min-height: 112px; padding: 9px; border: 1px solid transparent; border-radius: 11px; }
+.battle-pass-reward { display: grid; grid-template-rows: minmax(0, 1fr) 30px; align-items: center; gap: 5px; min-width: 0; min-height: 0; padding: 7px; border: 1px solid transparent; border-radius: 11px; overflow: hidden; }
 .battle-pass-reward-free { color: var(--brand-strong); background: linear-gradient(145deg, color-mix(in srgb, var(--brand) 8%, var(--surface)), color-mix(in srgb, var(--brand) 16%, var(--surface))); }
 .battle-pass-reward-premium { color: var(--premium-text); border-color: var(--premium-border); background: linear-gradient(145deg, #fff8e9, var(--premium-soft)); }
 html[data-theme='dark'] .battle-pass-reward-premium { color: var(--premium-text); border-color: var(--premium-border); background: linear-gradient(145deg, #493e27, var(--premium-soft)); }
@@ -433,23 +433,54 @@ html[data-theme='dark'] .battle-pass-reward-premium { color: var(--premium-text)
 .battle-pass-track-icon-free { color: #fff !important; background: var(--brand) !important; }
 .battle-pass-track-icon-premium { color: #fff !important; background: #9b7332 !important; }
 .battle-pass-track-icon .MuiSvgIcon-root { font-size: 15px; }
-.battle-pass-reward-title { min-height: 30px; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; color: inherit; line-height: 1.35 !important; }
-.battle-pass-reward-icon { width: 44px !important; height: 44px !important; color: var(--brand) !important; background: color-mix(in srgb, currentColor 12%, var(--surface)) !important; }
+.battle-pass-reward-main { display: grid; grid-template-rows: 46px minmax(2.6em, auto); justify-items: center; align-content: center; gap: 5px; min-width: 0; min-height: 0; }
+.battle-pass-reward-title { width: 100%; min-width: 0; max-height: 2.7em; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; color: inherit; line-height: 1.35 !important; overflow-wrap: anywhere; text-align: center; }
+.battle-pass-reward-icon { width: 42px !important; height: 42px !important; color: var(--brand) !important; background: color-mix(in srgb, currentColor 12%, var(--surface)) !important; }
+.battle-pass-reward-icon-premium { color: var(--premium-text) !important; }
 .battle-pass-reward-image { width: 100%; height: 100%; object-fit: cover; }
+.battle-pass-reward-action { display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 30px; }
+.battle-pass-reward-action .MuiChip-root { max-width: 100%; height: 26px; }
+.battle-pass-reward-action .MuiChip-label { padding-inline: 8px; font-size: 11px; }
+.battle-pass-claim-button.MuiButton-root { width: 100%; min-width: 0; min-height: 30px; max-height: 30px; padding: 2px 8px; color: inherit; border-color: currentColor; font-size: 11px; font-weight: 750; line-height: 1.2; white-space: nowrap; }
+.battle-pass-claim-button .MuiButton-startIcon, .battle-pass-claim-button .MuiButton-endIcon { margin: 0; }
+.battle-pass-reward-lock { max-width: 100%; overflow: hidden; font-size: 10px !important; line-height: 1.2 !important; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
 .battle-pass-reward-empty { border-color: color-mix(in srgb, var(--border) 68%, var(--text-faint)); background: color-mix(in srgb, var(--surface-muted) 48%, var(--surface)); }
 .battle-pass-reward-empty.battle-pass-reward-free { border-style: dashed; border-color: color-mix(in srgb, var(--brand) 38%, var(--border)); }
 .battle-pass-reward-empty.battle-pass-reward-premium { border-style: dashed; border-color: color-mix(in srgb, var(--premium-text) 40%, var(--premium-border)); background: color-mix(in srgb, var(--premium-soft) 28%, var(--surface)); }
-.battle-pass-reward .MuiChip-root { justify-self: start; }
-.battle-pass-reward .MuiButton-root { justify-self: start; min-width: 0; padding: 3px 8px; color: inherit; border: 1px solid currentColor; font-size: 11px; font-weight: 750; }
 .case-result-card { display: flex; align-items: center; gap: 16px; padding: 18px; border: 1px solid color-mix(in srgb, var(--brand) 35%, var(--border)) !important; background: color-mix(in srgb, var(--brand) 7%, var(--surface)) !important; }
 .case-result-icon { width: 58px !important; height: 58px !important; flex: 0 0 auto; color: #fff !important; background: linear-gradient(135deg, var(--brand-gradient-end), var(--brand-gradient-start)) !important; }
 .inventory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.inventory-case-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); align-items: start; }
 .inventory-item { border: 1px solid var(--border); border-radius: 13px !important; box-shadow: none !important; }
 .inventory-item .MuiCardContent-root { padding: 15px; }
 .inventory-item-icon { width: 43px !important; height: 43px !important; margin-bottom: 12px; color: var(--brand) !important; background: var(--brand-soft) !important; }
-.case-reward-list { display: grid; gap: 9px; margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--border); }
-.case-reward-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px; border: 1px solid var(--border-soft); border-radius: 10px; background: var(--surface-raised); }
-.case-reward-row > :first-child { overflow-wrap: anywhere; }
+.inventory-case-card .MuiCardContent-root { display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
+.inventory-case-image { width: 100% !important; height: 128px !important; flex: 0 0 128px; margin: 0; border-radius: 11px !important; overflow: hidden; }
+.inventory-case-summary { display: grid; gap: 9px; min-width: 0; }
+.inventory-case-heading, .case-reward-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.inventory-case-heading .MuiTypography-overline { color: var(--text-secondary); font-size: 9px; letter-spacing: .12em; line-height: 1.2; }
+.inventory-case-title { overflow-wrap: break-word; word-break: normal; line-height: 1.3 !important; }
+.inventory-case-heading .MuiChip-root { flex: 0 0 auto; max-width: 45%; }
+.inventory-case-heading .MuiChip-label { overflow: hidden; text-overflow: ellipsis; }
+.inventory-case-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
+.inventory-case-actions .MuiButton-root { min-height: 38px; padding-inline: 8px; font-size: 12px; white-space: nowrap; }
+.inventory-case-summary > .MuiTypography-caption { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: break-word; word-break: normal; }
+.case-reward-list { display: grid; gap: 12px; min-width: 0; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.case-reward-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
+.case-reward-card { display: grid; grid-template-columns: 40px minmax(0, 1fr) 48px; align-items: center; gap: 9px; min-width: 0; padding: 8px; border: 1px solid var(--border-soft); border-left: 3px solid var(--border); border-radius: 11px; background: var(--surface-raised); }
+.rarity-border-common { border-left-color: #9aa8b8; }
+.rarity-border-rare { border-left-color: #5a91db; }
+.rarity-border-epic { border-left-color: #9a6fd0; }
+.case-reward-image { width: 40px !important; height: 40px !important; border-radius: 9px !important; color: var(--brand) !important; background: var(--brand-soft) !important; }
+.case-reward-copy { display: grid; gap: 2px; min-width: 0; }
+.case-reward-name { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: break-word; word-break: normal; line-height: 1.3 !important; }
+.case-reward-copy > .MuiTypography-caption { overflow-wrap: break-word; word-break: normal; }
+
+.case-reward-card > .MuiChip-root { justify-self: end; }
+.case-reward-chance-track { height: 4px; overflow: hidden; margin-top: 5px; border-radius: 99px; background: var(--surface-muted); }
+.case-reward-chance-fill { height: 100%; border-radius: inherit; background: #9aa8b8; }
+.case-reward-chance-rare .case-reward-chance-fill { background: #5a91db; }
+.case-reward-chance-epic .case-reward-chance-fill { background: #9a6fd0; }
 .rarity-chip { margin-bottom: 2px; font-size: 10px !important; }
 .rarity-common { color: var(--text-secondary) !important; background: var(--neutral-soft) !important; }
 .rarity-rare { color: #3e73b8 !important; background: #eaf2fc !important; }
@@ -464,6 +495,7 @@ html[data-theme='dark'] .rarity-epic { color: #c8a9f6 !important; background: #3
   .wallet-balance-card .MuiCardContent-root { padding: 20px; }
   .wallet-balance-card .MuiTypography-h3 { font-size: 2.4rem; }
   .inventory-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inventory-case-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 380px) {
@@ -503,6 +535,7 @@ html[data-theme='dark'] .rarity-epic { color: #c8a9f6 !important; background: #3
 @media (prefers-reduced-motion: reduce) {
   .case-reveal-glow { animation: none; }
   .case-roulette-ready .case-roulette-track { transition: none; }
+  .case-reel-track { transition: none !important; }
 }
 
 @media (max-width: 700px) {
@@ -516,7 +549,7 @@ html[data-theme='dark'] .rarity-epic { color: #c8a9f6 !important; background: #3
   .event-confirm-action { margin-top: 8px; }
   .battle-pass-layout { grid-template-columns: 38px minmax(0, 1fr); gap: 5px; }
   .battle-pass-legend-lane .MuiTypography-root { font-size: 9px; }
-  .battle-pass-level { flex-basis: 128px; }
+  .battle-pass-level { flex-basis: 148px; }
 }
 
 .event-group-self-signup { margin-top: 6px; border-color: color-mix(in srgb, var(--brand) 25%, var(--border)); }
@@ -990,11 +1023,15 @@ body { background: var(--app-bg); color: var(--text-primary); }
 .admin-case-reward { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 10px 0; border-top: 1px solid var(--border-soft); }
 .inventory-item-image { width: 100%; height: 100%; object-fit: cover; }
 .case-reel-window { position: relative; overflow: hidden; width: 100%; height: 180px; border-radius: 14px; background: var(--surface-muted); }
-.case-reel-track { display: flex; align-items: stretch; gap: 8px; height: 100%; padding: 18px 0; transition: transform 3.2s cubic-bezier(.08,.72,.08,1); will-change: transform; }
-.case-reel-item { display: flex; flex: 0 0 140px; flex-direction: column; align-items: center; justify-content: center; gap: 7px; padding: 8px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); text-align: center; overflow: hidden; }
+.case-reel-track { display: flex; align-items: stretch; gap: 8px; width: max-content; height: 100%; padding: 18px 12px; transition: none; will-change: transform; }
+.case-reel-track.case-reel-rolling { transition: transform 4s cubic-bezier(.08,.72,.08,1); }
+.case-reel-track.case-reel-settling { transition: transform .7s cubic-bezier(.2,.72,.18,1); }
+.case-reel-item { display: flex; flex: 0 0 148px; box-sizing: border-box; flex-direction: column; align-items: center; justify-content: center; gap: 7px; padding: 8px; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); text-align: center; overflow: hidden; }
 .case-reel-icon { background: var(--brand-soft) !important; color: var(--brand) !important; }
 .case-reel-winner { border: 2px solid var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.case-reel-nearby { border-color: color-mix(in srgb, var(--brand) 65%, var(--border)); box-shadow: 0 0 0 2px var(--brand-soft); }
 .case-reel-marker { position: absolute; inset-block: 0; left: 50%; width: 3px; transform: translateX(-50%); background: var(--brand); pointer-events: none; }
+.case-reel-status { min-height: 24px; margin-top: 12px !important; text-align: center; }
 .case-reveal-result { display: flex; align-items: center; gap: 16px; margin-top: 20px; padding: 16px; border-radius: 14px; background: var(--brand-soft); }
 @media (max-width: 600px) {
   .admin-case-reward { align-items: flex-start; flex-wrap: wrap; }
@@ -1011,6 +1048,10 @@ body { background: var(--app-bg); color: var(--text-primary); }
 .battle-pass-layout, .battle-pass-levels { min-width: 0; }
 .battle-pass-reward-title { overflow-wrap: anywhere; }
 .inventory-grid > *, .inventory-item, .case-result-card { min-width: 0; }
+.inventory-case-card, .inventory-case-card .MuiCardContent-root { min-width: 0; }
+.inventory-case-card .MuiCardContent-root { padding: 14px; }
+.case-reward-card .MuiChip-root { max-width: 58px; }
+.case-reward-card .MuiChip-label { padding-inline: 7px; font-size: 11px; }
 .case-reveal, .case-roulette { min-width: 0; max-width: 100%; overflow: hidden; }
 .account-page, .account-content, .account-card { min-width: 0; max-width: 100%; }
 .account-form-content, .account-card-content { min-width: 0; }
@@ -1120,8 +1161,8 @@ body { background: var(--app-bg); color: var(--text-primary); }
   .schedule-entry { grid-template-columns: 66px minmax(0, 1fr); gap: 8px; }
   .schedule-entry > .MuiChip-root { grid-column: 2; justify-self: start; }
   .battle-pass-layout { grid-template-columns: 34px minmax(0, 1fr); gap: 5px; }
-  .battle-pass-legend { height: 310px; }
-  .battle-pass-level { height: 310px; flex-basis: 124px; }
+  .battle-pass-legend { height: 348px; }
+  .battle-pass-level { height: 348px; flex-basis: 142px; }
   .inventory-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .wallet-balance-card .MuiCardContent-root { padding: 19px; }
   .wallet-balance-card .MuiTypography-h3 { font-size: 2.25rem; }
@@ -1171,7 +1212,6 @@ body { background: var(--app-bg); color: var(--text-primary); }
   .welcome-title { overflow-wrap: anywhere; }
   .battle-pass-hero .MuiCardContent-root { padding: 18px !important; }
   .battle-pass-level-title { white-space: normal; }
-  .case-reward-row { align-items: flex-start; }
   .assignment-heading-row .assignment-status { white-space: normal; }
   .review-table-content .MuiTableBody-root .MuiTableCell-root:last-child .MuiStack-root { flex-wrap: wrap; justify-content: flex-start; }
   .review-table-content .MuiTableBody-root .MuiTableCell-root:last-child .MuiButton-root { flex: 1 1 auto; }

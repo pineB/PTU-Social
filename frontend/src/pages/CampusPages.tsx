@@ -1029,35 +1029,62 @@ function InventoryCard({ item, onOpen, isOpening, canAfford, showRewards, onTogg
   const { campusCases } = useCampusWorkflow();
   const campusCase = campusCases.find((entry) => entry.id === item.caseId);
   const caseRewards = campusCase?.rewards ?? [];
+  const rarityClass = (rarity: string) => rarity === 'Эпический' ? 'epic' : rarity === 'Редкий' ? 'rare' : 'common';
   return (
-    <Card className="inventory-item">
+    <Card className="inventory-item inventory-case-card">
       <CardContent>
-        <Avatar className={`inventory-item-icon${item.kind === 'case' ? ' inventory-case-icon' : ''}`}>
+        <Avatar className={`inventory-item-icon inventory-case-image${item.kind === 'case' ? ' inventory-case-icon' : ''}`}>
           <AuthenticatedImage src={campusCase?.imageUrl} alt={item.name} className="inventory-item-image" fallback={<CardGiftcardRoundedIcon />} />
         </Avatar>
-        <Chip size="small" label="Кейс" className="rarity-chip subtle-chip" />
-        <Typography fontWeight={700} mt={1}>{item.name}</Typography>
-        <Typography variant="caption" color="text.secondary">{item.source}</Typography>
-        <Button fullWidth variant="text" sx={{ mt: 1 }} onClick={onToggleRewards}>
-          {showRewards ? 'Скрыть награды' : 'Показать награды'}
-        </Button>
-        <Button fullWidth variant="contained" disabled={isOpening || !canAfford} onClick={() => onOpen(item)}>
-          {isOpening ? <CircularProgress size={18} color="inherit" /> : campusCase ? `Открыть · ${campusCase.price} жетонов` : 'Открытие недоступно'}
-        </Button>
-        {!canAfford && campusCase && <Typography variant="caption" color="error">Недостаточно жетонов</Typography>}
+        <Box className="inventory-case-summary">
+          <Box className="inventory-case-heading">
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="overline">КЕЙС</Typography>
+              <Typography className="inventory-case-title" fontWeight={750}>{item.name}</Typography>
+            </Box>
+            <Chip size="small" label={formatNounCount(caseRewards.length, 'награда', 'награды', 'наград')} className="subtle-chip" />
+          </Box>
+          <Typography variant="caption" color="text.secondary" className="inventory-case-description">{campusCase?.description || item.source}</Typography>
+          <Stack gap={1} className="inventory-case-actions">
+            <Button fullWidth variant="contained" disabled={isOpening || !canAfford} onClick={() => onOpen(item)}>
+              {isOpening ? <CircularProgress size={18} color="inherit" /> : campusCase ? `Открыть · ${campusCase.price} жетонов` : 'Открытие недоступно'}
+            </Button>
+            <Button fullWidth variant="outlined" onClick={onToggleRewards}>
+              {showRewards ? 'Скрыть награды' : 'Шансы и награды'}
+            </Button>
+          </Stack>
+          {!canAfford && campusCase && <Typography variant="caption" color="error">Недостаточно жетонов</Typography>}
+        </Box>
         {showRewards && (
           <Box className="case-reward-list">
-            <Typography variant="subtitle2" fontWeight={750}>Содержимое кейса</Typography>
-            {caseRewards.length === 0 && <Typography variant="body2" color="text.secondary">В кейсе пока нет наград.</Typography>}
-            {caseRewards.map((reward) => (
-              <Box className="case-reward-row" key={reward.name}>
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography variant="body2" fontWeight={650}>{reward.name}</Typography>
-                  <Typography variant="caption" color="text.secondary">{reward.cosmeticType === 'avatar' ? 'Аватар' : reward.cosmeticType === 'avatar-frame' ? 'Рамка профиля' : reward.cosmeticType === 'profile-background' ? 'Фон профиля' : 'Значок'} · {reward.rarity}</Typography>
-                </Box>
-                <Chip size="small" label={`${reward.chance}%`} className={`rarity-chip rarity-${reward.rarity === 'Эпический' ? 'epic' : reward.rarity === 'Редкий' ? 'rare' : 'common'}`} />
+            <Box className="case-reward-heading">
+              <Box>
+                <Typography variant="subtitle2" fontWeight={750}>Награды кейса</Typography>
+                <Typography variant="caption" color="text.secondary">Шанс выпадения каждой награды</Typography>
               </Box>
-            ))}
+              <Typography variant="caption" color="text.secondary">Шанс</Typography>
+            </Box>
+            {caseRewards.length === 0 ? <Typography variant="body2" color="text.secondary">В кейсе пока нет наград.</Typography> : (
+              <Box className="case-reward-grid">
+                {caseRewards.map((reward, index) => (
+                  <Box className={`case-reward-card rarity-border-${rarityClass(reward.rarity)}`} key={`${reward.name}-${index}`}>
+                    <Avatar className="case-reward-image">
+                      <AuthenticatedImage src={reward.imageUrl} alt={reward.name} className="inventory-item-image" fallback={<WorkspacePremiumRoundedIcon />} />
+                    </Avatar>
+                    <Box className="case-reward-copy">
+                      <Typography variant="body2" fontWeight={700} className="case-reward-name">{reward.name}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {reward.cosmeticType === 'avatar' ? 'Аватар' : reward.cosmeticType === 'avatar-frame' ? 'Рамка профиля' : reward.cosmeticType === 'profile-background' ? 'Фон профиля' : 'Значок'} · {reward.rarity}
+                      </Typography>
+                      <Box className={`case-reward-chance-track case-reward-chance-${rarityClass(reward.rarity)}`}>
+                        <Box className="case-reward-chance-fill" style={{ width: `${Math.min(100, Math.max(0, reward.chance))}%` }} />
+                      </Box>
+                    </Box>
+                    <Chip size="small" label={`${reward.chance}%`} className={`rarity-chip rarity-${rarityClass(reward.rarity)}`} />
+                  </Box>
+                ))}
+              </Box>
+            )}
           </Box>
         )}
       </CardContent>
@@ -1187,21 +1214,35 @@ export function BattlePassPage() {
                     <Box className={`battle-pass-reward battle-pass-reward-${track}${reward ? '' : ' battle-pass-reward-empty'}`} key={track}>
                       {reward && (
                         <>
-                          <Avatar className="battle-pass-reward-icon">
-                            <AuthenticatedImage
-                              src={reward.imageUrl ?? undefined}
-                              alt={reward.title}
-                              className="battle-pass-reward-image"
-                              fallback={reward.rewardKind === 'case' ? <CardGiftcardRoundedIcon /> : <WorkspacePremiumRoundedIcon />}
-                            />
-                          </Avatar>
-                          <Typography className="battle-pass-reward-title" variant="caption" title={reward.title}>{reward.title}</Typography>
-                          {reward.claimed ? <Chip size="small" label="Получено" color="success" /> :
-                            reward.level <= (currentLevel ?? 0) && (track === 'free' || premiumPassOwned === true) ? (
-                              <Button size="small" disabled={busyAction !== null} onClick={() => void handleClaim(reward)}>
-                                {busyAction === reward.id ? <CircularProgress size={16} /> : 'Забрать'}
-                              </Button>
-                            ) : <Typography variant="caption" color="text.secondary">{reward.level > (currentLevel ?? 0) ? 'Закрыто' : 'Нужен пропуск'}</Typography>}
+                          <Box className="battle-pass-reward-main">
+                            <Avatar className={`battle-pass-reward-icon battle-pass-reward-icon-${track}`}>
+                              <AuthenticatedImage
+                                src={reward.imageUrl ?? undefined}
+                                alt={reward.title}
+                                className="battle-pass-reward-image"
+                                fallback={reward.rewardKind === 'case' ? <CardGiftcardRoundedIcon /> : <WorkspacePremiumRoundedIcon />}
+                              />
+                            </Avatar>
+                            <Typography className="battle-pass-reward-title" variant="caption" title={reward.title}>{reward.title}</Typography>
+                          </Box>
+                          <Box className="battle-pass-reward-action">
+                            {reward.claimed ? <Chip size="small" label="Получено" color="success" /> :
+                              reward.level <= (currentLevel ?? 0) && (track === 'free' || premiumPassOwned === true) ? (
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  className="battle-pass-claim-button"
+                                  disabled={busyAction !== null}
+                                  onClick={() => void handleClaim(reward)}
+                                >
+                                  {busyAction === reward.id ? <CircularProgress size={15} /> : 'Забрать'}
+                                </Button>
+                              ) : (
+                                <Typography className="battle-pass-reward-lock" variant="caption" color="text.secondary">
+                                  {reward.level > (currentLevel ?? 0) ? 'Закрыто' : 'Нужен премиум'}
+                                </Typography>
+                              )}
+                          </Box>
                         </>
                       )}
                     </Box>
@@ -1226,22 +1267,73 @@ export function InventoryPage() {
   const [inventoryTab, setInventoryTab] = useState<'cases' | 'items'>('cases');
   const [reel, setReel] = useState<Array<{ label: string; rarity: string; winner: boolean }>>([]);
   const [reelOffset, setReelOffset] = useState(0);
+  const [reelPhase, setReelPhase] = useState<'idle' | 'rolling' | 'suspense' | 'settling' | 'stopped'>('idle');
+  const [suspenseIndex, setSuspenseIndex] = useState<number | null>(null);
   const [revealComplete, setRevealComplete] = useState(false);
   const [error, setError] = useState('');
   const actionLock = useRef(false);
   const reelWindow = useRef<HTMLDivElement>(null);
-  const winnerIndex = 28;
+  const reelTrack = useRef<HTMLDivElement>(null);
+  const winnerIndex = 18;
 
   useEffect(() => {
     if (!openedItem || reel.length === 0) return;
+    let suspenseTimer = 0;
+    let revealTimer = 0;
+    let completionTimer = 0;
     const frame = requestAnimationFrame(() => {
       const visibleWidth = reelWindow.current?.clientWidth ?? 320;
-      setReelOffset(winnerIndex * 148 + 68 - visibleWidth / 2);
+      const trackWidth = reelTrack.current?.scrollWidth ?? 0;
+      const maxOffset = Math.max(0, trackWidth - visibleWidth);
+      const finalOffset = Math.min(maxOffset, Math.max(0, winnerIndex * 156 + 12 + 74 - visibleWidth / 2));
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      if (reduceMotion) {
+        setReelPhase('stopped');
+        setReelOffset(finalOffset);
+        revealTimer = window.setTimeout(() => {
+          setReelPhase('stopped');
+          setRevealComplete(true);
+        }, 80);
+        return;
+      }
+
+      const settleRange = 2 * 156;
+      const minStopOffset = Math.max(0, finalOffset - settleRange);
+      const maxStopOffset = Math.min(maxOffset, finalOffset + settleRange);
+      const edgeRoll = Math.random();
+      const randomStopOffset = edgeRoll < 0.05
+        ? minStopOffset
+        : edgeRoll > 0.95
+          ? maxStopOffset
+          : minStopOffset + Math.random() * (maxStopOffset - minStopOffset);
+      const stopIndex = Math.min(
+        reel.length - 1,
+        Math.max(0, Math.round((randomStopOffset + visibleWidth / 2 - 12 - 74) / 156)),
+      );
+      setReelPhase('rolling');
+      setSuspenseIndex(null);
+      setReelOffset(randomStopOffset);
+
+      suspenseTimer = window.setTimeout(() => {
+        setReelPhase('suspense');
+        setSuspenseIndex(stopIndex);
+        revealTimer = window.setTimeout(() => {
+          setReelPhase('settling');
+          setSuspenseIndex(null);
+          setReelOffset(finalOffset);
+          completionTimer = window.setTimeout(() => {
+            setReelPhase('stopped');
+            setRevealComplete(true);
+          }, 700);
+        }, 650);
+      }, 4000);
     });
-    const timer = window.setTimeout(() => setRevealComplete(true), 3400);
     return () => {
       cancelAnimationFrame(frame);
-      window.clearTimeout(timer);
+      window.clearTimeout(suspenseTimer);
+      window.clearTimeout(revealTimer);
+      window.clearTimeout(completionTimer);
     };
   }, [openedItem, reel.length]);
 
@@ -1252,6 +1344,8 @@ export function InventoryPage() {
     setOpenedItem(null);
     setReel([]);
     setReelOffset(0);
+    setReelPhase('idle');
+    setSuspenseIndex(null);
     setRevealComplete(false);
     setError('');
     try {
@@ -1274,6 +1368,7 @@ export function InventoryPage() {
           winner: false,
         })),
       ]);
+      setReelOffset(0);
       setOpenedItem(reward);
     } catch (openError) {
       setError(openError instanceof Error ? openError.message : 'Не удалось открыть кейс.');
@@ -1299,7 +1394,7 @@ export function InventoryPage() {
         <SectionCard title="Пока пусто" icon={<CardGiftcardRoundedIcon />}>
           <Typography color="text.secondary">Кейсы не загружены.</Typography>
         </SectionCard>
-      ) : inventoryTab === 'cases' ? <Box className="inventory-grid">{inventory.filter((item) => item.kind === 'case').map((item) => {
+      ) : inventoryTab === 'cases' ? <Box className="inventory-grid inventory-case-grid">{inventory.filter((item) => item.kind === 'case').map((item) => {
         const caseInfo = campusCases.find((entry) => entry.id === item.caseId);
         const canAfford = walletBalance !== null && caseInfo !== undefined && walletBalance >= caseInfo.price;
         return (
@@ -1333,9 +1428,9 @@ export function InventoryPage() {
         <DialogTitle>Открытие кейса</DialogTitle>
         <DialogContent>
           <Box className="case-reel-window" ref={reelWindow}>
-            <Box className={`case-reel-track${revealComplete ? ' case-reel-settled' : ''}`} style={{ transform: `translateX(-${reelOffset}px)` }}>
+            <Box ref={reelTrack} className={`case-reel-track case-reel-${reelPhase}`} style={{ transform: `translateX(-${reelOffset}px)` }}>
               {reel.map((entry, index) => (
-                <Box className={`case-reel-item${entry.winner && revealComplete ? ' case-reel-winner' : ''}`} key={`${index}-${entry.label}`}>
+                <Box className={`case-reel-item${entry.winner && revealComplete ? ' case-reel-winner' : ''}${reelPhase === 'suspense' && suspenseIndex === index ? ' case-reel-nearby' : ''}`} key={`${index}-${entry.label}`}>
                   <Avatar className="case-reel-icon"><CardGiftcardRoundedIcon /></Avatar>
                   <Typography variant="caption" fontWeight={650}>{entry.label}</Typography>
                   <Typography variant="caption" color="text.secondary">{entry.rarity}</Typography>
@@ -1344,6 +1439,11 @@ export function InventoryPage() {
             </Box>
             <Box className="case-reel-marker" />
           </Box>
+          {!revealComplete && (
+            <Typography className="case-reel-status" role="status" variant="body2" color="text.secondary">
+              {reelPhase === 'suspense' ? 'Прокрутка остановилась…' : reelPhase === 'settling' ? 'Определяем выпавшую награду…' : 'Кейс открыт, выбираем награду…'}
+            </Typography>
+          )}
           {revealComplete && openedItem && (
             <Box className="case-reveal-result">
               <Avatar className="case-result-icon">
