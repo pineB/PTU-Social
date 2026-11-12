@@ -1230,42 +1230,36 @@ export function InventoryPage() {
     let revealTimer = 0;
     let completionTimer = 0;
     const frame = requestAnimationFrame(() => {
-      const visibleWidth = reelWindow.current?.clientWidth ?? 320;
-      const trackWidth = reelTrack.current?.scrollWidth ?? 0;
-      const maxOffset = Math.max(0, trackWidth - visibleWidth);
-      const finalOffset = Math.min(maxOffset, Math.max(0, winnerIndex * 156 + 12 + 74 - visibleWidth / 2));
+      const windowEl = reelWindow.current;
+      const trackEl = reelTrack.current;
+      if (!windowEl || !trackEl) return;
+      const visibleWidth = windowEl.clientWidth;
+      const maxOffset = Math.max(0, trackEl.scrollWidth - visibleWidth);
+      // Центрируем именно карточку победителя по её реальной геометрии в DOM.
+      const winnerEl = trackEl.children[winnerIndex] as HTMLElement | undefined;
+      const winnerCenter = winnerEl
+        ? winnerEl.offsetLeft + winnerEl.offsetWidth / 2
+        : winnerIndex * 156 + 12 + 74;
+      const finalOffset = Math.min(maxOffset, Math.max(0, winnerCenter - visibleWidth / 2));
       const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
       if (reduceMotion) {
         setReelPhase('stopped');
         setReelOffset(finalOffset);
-        revealTimer = window.setTimeout(() => {
-          setReelPhase('stopped');
-          setRevealComplete(true);
-        }, 80);
+        completionTimer = window.setTimeout(() => setRevealComplete(true), 80);
         return;
       }
 
-      const settleRange = 2 * 156;
-      const minStopOffset = Math.max(0, finalOffset - settleRange);
-      const maxStopOffset = Math.min(maxOffset, finalOffset + settleRange);
-      const edgeRoll = Math.random();
-      const randomStopOffset = edgeRoll < 0.05
-        ? minStopOffset
-        : edgeRoll > 0.95
-          ? maxStopOffset
-          : minStopOffset + Math.random() * (maxStopOffset - minStopOffset);
-      const stopIndex = Math.min(
-        reel.length - 1,
-        Math.max(0, Math.round((randomStopOffset + visibleWidth / 2 - 12 - 74) / 156)),
-      );
+      // Докручиваем чуть дальше победителя и возвращаемся к нему — без смены карточки под маркером.
+      const overshoot = Math.random() * 40 + 24;
+      const rollOffset = Math.min(maxOffset, finalOffset + overshoot);
       setReelPhase('rolling');
       setSuspenseIndex(null);
-      setReelOffset(randomStopOffset);
+      setReelOffset(rollOffset);
 
       suspenseTimer = window.setTimeout(() => {
         setReelPhase('suspense');
-        setSuspenseIndex(stopIndex);
+        setSuspenseIndex(winnerIndex);
         revealTimer = window.setTimeout(() => {
           setReelPhase('settling');
           setSuspenseIndex(null);
@@ -1273,8 +1267,8 @@ export function InventoryPage() {
           completionTimer = window.setTimeout(() => {
             setReelPhase('stopped');
             setRevealComplete(true);
-          }, 700);
-        }, 650);
+          }, 800);
+        }, 700);
       }, 4000);
     });
     return () => {

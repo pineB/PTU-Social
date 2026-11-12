@@ -48,6 +48,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
 			return;
 		}
 
+		boolean readOnly = isReadOnly(request);
 		String scope;
 		String identity;
 		AppProperties.Limit limit;
@@ -57,14 +58,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
 			limit = limits.login();
 		}
 		else if (currentPrincipal() instanceof UserPrincipal principal) {
-			scope = "user";
+			// Reads (GET/HEAD) are limited by a separate, much higher budget: one page may load
+			// dozens of images, while state-changing requests stay at the spec limit.
+			scope = readOnly ? "user-read" : "user";
 			identity = principal.id().toString();
-			limit = limits.authenticated();
+			limit = readOnly ? limits.authenticatedReadOrFallback() : limits.authenticated();
 		}
 		else {
-			scope = "ip";
+			scope = readOnly ? "ip-read" : "ip";
 			identity = clientIp(request);
-			limit = limits.anonymous();
+			limit = readOnly ? limits.anonymousReadOrFallback() : limits.anonymous();
 		}
 
 		RateLimiter.RateLimitDecision decision = rateLimiter.acquire(scope, identity, limit);
@@ -81,6 +84,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
 	protected boolean shouldNotFilter(HttpServletRequest request) {
 		String path = request.getRequestURI();
 		return path.startsWith("/actuator/") || !path.startsWith(API_PREFIX);
+	}
+
+	private static boolean isReadOnly(HttpServletRequest request) {
+		return HttpMethod.GET.matches(request.getMethod()) || HttpMethod.HEAD.matches(request.getMethod());
 	}
 
 	private static Object currentPrincipal() {

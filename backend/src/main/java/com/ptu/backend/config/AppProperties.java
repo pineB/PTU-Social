@@ -46,7 +46,19 @@ public record AppProperties(
 	public record Seed(String officeEmail, String officePassword, String adminEmail, String adminPassword) {
 	}
 
-	public record RateLimit(boolean enabled, Limit login, Limit authenticated, Limit anonymous) {
+	public record RateLimit(boolean enabled, Limit login, Limit authenticated, Limit authenticatedRead, Limit anonymous,
+			Limit anonymousRead) {
+
+		/**
+		 * Лимит на чтение (GET/HEAD); если не задан — используется общий лимит.
+		 */
+		public Limit authenticatedReadOrFallback() {
+			return authenticatedRead != null ? authenticatedRead : authenticated;
+		}
+
+		public Limit anonymousReadOrFallback() {
+			return anonymousRead != null ? anonymousRead : anonymous;
+		}
 	}
 
 	public record Limit(int requests, Duration window) {

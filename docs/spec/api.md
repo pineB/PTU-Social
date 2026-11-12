@@ -45,8 +45,13 @@
 | Scope | Идентификатор | Лимит | По умолчанию |
 | --- | --- | --- | --- |
 | `login` (`POST /api/auth/login`) | IP клиента (`X-Forwarded-For`, иначе remote addr) | `RATE_LIMIT_LOGIN_REQUESTS` / `RATE_LIMIT_LOGIN_WINDOW` | 5 / 1m |
-| `user` (любой `/api/**` с валидным JWT) | id пользователя | `RATE_LIMIT_AUTHENTICATED_*` | 120 / 1m |
-| `ip` (анонимный `/api/**`) | IP клиента | `RATE_LIMIT_ANONYMOUS_*` | 60 / 1m |
+| `user` (мутации `/api/**` с валидным JWT) | id пользователя | `RATE_LIMIT_AUTHENTICATED_*` | 120 / 1m |
+| `user-read` (`GET`/`HEAD` с валидным JWT) | id пользователя | `RATE_LIMIT_AUTHENTICATED_READ_*` | 600 / 1m |
+| `ip` (анонимные мутации `/api/**`) | IP клиента | `RATE_LIMIT_ANONYMOUS_*` | 60 / 1m |
+| `ip-read` (анонимные `GET`/`HEAD`) | IP клиента | `RATE_LIMIT_ANONYMOUS_READ_*` | 300 / 1m |
+
+- Чтение (`GET`/`HEAD`) и изменение состояния считаются в **разных** счётчиках: загрузка страницы с десятками картинок не расходует лимит на действия.
+- Если `*_READ_*` не заданы, используются общие лимиты (`authenticated` / `anonymous`).
 
 - Вне `/api/**` (например, `/actuator/**`) лимиты не применяются.
 - Отключение: `RATE_LIMIT_ENABLED=false`.

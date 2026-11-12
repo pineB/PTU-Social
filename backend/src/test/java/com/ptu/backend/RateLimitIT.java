@@ -106,22 +106,49 @@ class RateLimitIT extends AbstractIntegrationTest {
 	}
 
 	@Test
-	void authenticatedUserLimitIsEnforcedAfter120Requests() throws Exception {
-		User office = createUser(uniqueEmail("office"), "office12345", Role.ACADEMIC_OFFICE);
-		String authorization = bearer(office);
+	void authenticatedUserWriteLimitIsEnforcedAfter120Requests() throws Exception {
+		User student = createUser(uniqueEmail("student"), "student12345", Role.STUDENT);
+		String authorization = bearer(student);
 		awaitFreshWindow();
 
 		for (int request = 1; request <= 120; request++) {
-			mockMvc.perform(get("/api/academic/registration-requests").header(HttpHeaders.AUTHORIZATION, authorization))
-					.andExpect(status().isOk());
+			mockMvc.perform(post("/api/academic/teacher-invites")
+							.header(HttpHeaders.AUTHORIZATION, authorization)
+							.contentType(APPLICATION_JSON)
+							.content("{}"))
+					.andExpect(status().isForbidden());
 		}
 
-		mockMvc.perform(get("/api/academic/registration-requests").header(HttpHeaders.AUTHORIZATION, authorization))
+		mockMvc.perform(post("/api/academic/teacher-invites")
+						.header(HttpHeaders.AUTHORIZATION, authorization)
+						.contentType(APPLICATION_JSON)
+						.content("{}"))
 				.andExpect(status().isTooManyRequests())
 				.andExpect(header().exists(HttpHeaders.RETRY_AFTER))
 				.andExpect(jsonPath("$.status").value(429))
 				.andExpect(jsonPath("$.error").value("Too Many Requests"))
-				.andExpect(jsonPath("$.path").value("/api/academic/registration-requests"));
+				.andExpect(jsonPath("$.path").value("/api/academic/teacher-invites"));
+	}
+
+	@Test
+	void authenticatedUserReadsUseSeparateHigherBudget() throws Exception {
+		User office = createUser(uniqueEmail("office"), "office12345", Role.ACADEMIC_OFFICE);
+		String authorization = bearer(office);
+		awaitFreshWindow();
+
+		// 130 reads exceed the write limit (120) but stay within the read budget (600).
+		for (int request = 1; request <= 130; request++) {
+			mockMvc.perform(get("/api/academic/registration-requests").header(HttpHeaders.AUTHORIZATION, authorization))
+					.andExpect(status().isOk());
+		}
+
+		// Reads must not consume the write budget: the request reaches the controller and fails
+		// validation (400) instead of being rejected by the limiter (429).
+		mockMvc.perform(post("/api/academic/teacher-invites")
+						.header(HttpHeaders.AUTHORIZATION, authorization)
+						.contentType(APPLICATION_JSON)
+						.content("{}"))
+				.andExpect(status().isBadRequest());
 	}
 
 	/**
