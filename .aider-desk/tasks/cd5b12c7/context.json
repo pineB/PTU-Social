@@ -1,0 +1,1509 @@
+{
+  "version": 2,
+  "contextMessages": [
+    {
+      "id": "f8fbe476-2cfc-4fa4-b940-86862ae4164c",
+      "role": "user",
+      "content": "Твой список задач: изучить /docs/spec/AGENTS.md, прочесть общую информацию по проекту в docs/information_about_project.md, хранить информацию из 1-го файла в контексте на постоянной основе, ко второму - обращаться по мере необходимости. Так же, ты обязан писать логи в agent-log.md, в него должен включаться мой запрос / решения которые мы принимали, и то как ты строил шаги / процесс, запомни: пиши логи очень лаконично и экономно для сохранения токенов. После выполнения этих действий, в рамках теста напиши первый лог. В дальних запросах я проведу тебя по задачам, которые предстоит выполнить в рамках проекта",
+      "promptContext": {
+        "id": "8e090531-7336-471b-9bf6-639aa307197c",
+        "userMessageId": "f8fbe476-2cfc-4fa4-b940-86862ae4164c"
+      },
+      "timestamp": 1793360132512
+    },
+    {
+      "role": "assistant",
+      "content": "### **Conversation Summary**\n\n#### **Primary Request and Intent**\nThe user develops **«ПТУ-Сошиал»** — a university social-educational platform (Spring Boot 3.5 backend, PostgreSQL 17 / Redis 7 / Mailpit in Docker Compose; React 19 + Vite + TS + MUI 7 SPA served by Nginx). Standing rules from `docs/spec/AGENTS.md`: the agent is a Senior Java Backend & DevOps engineer; keep `docs/spec/AGENTS.md` in permanent context, consult `docs/information_about_project.md` on demand, write **very concise** logs to `docs/agent-log.md` (request → decisions → verification), don't modify frontend files from the other team unless asked.\n\nIn this session the user asked to: (1) fix overly sensitive rate limiting that causes frequent `429` under normal use, (2) provide student and full demo login credentials, (3) write a final `README.md` with full system description + build/run instructions + test data, and **delete \"broken\" data** (accounts/records with gibberish names like \"grsgsfesefsfesfesfes\").\n\n#### **Key Technical Concepts**\n- Spring Boot 3.5 / Java 21, Spring Security JWT, Spring Data JPA, Flyway V1–V19, `ddl-auto=validate`, dev profile `SPRING_PROFILES_ACTIVE=dev`, seeders `DevDataSeeder` (`@Order(1)`) and `DevDemoDataSeeder` (`@Order(2)`, `@Profile(\"dev\")`, idempotent, marker = inventory `source = 'Демо-набор'`).\n- Redis fixed-window rate limiting: keys `rate_limit:{scope}:{identity}:{windowIndex}`, `INCR` + `EXPIRE`, fail-open on Redis errors, `429` + `Retry-After` via `ApiErrorWriter`.\n- **New read/write split**: `GET`/`HEAD` → scopes `user-read` / `ip-read` with 600/300 per minute; mutations → `user`/`ip` at spec limits 120/60; login 5/min per IP.\n- Nginx rewrites `X-Forwarded-For` to `$remote_addr` (anti-spoofing for login limit); `/api/actuator/health` proxied.\n- Integration tests via Testcontainers (`AbstractIntegrationTest` starts PostgreSQL + Redis containers); `RateLimitIT` clears `rate_limit:*` in `@BeforeEach`.\n- Demo data: 8 groups × 6 students, password `demo12345`; accounts `student@ptu.local`, `student2..48@ptu.local`, `teacher@/teacher2@/organizer@ptu.local`, `office@ptu.local/office12345`, `admin@ptu.local/AdminPtu2026!`.\n- Verification: no global `mvn`, use `backend/mvnw` (offline `-o` works); frontend built inside `nginx/Dockerfile` (`npm ci && npm run build`); stack at `http://localhost`, Mailpit `http://localhost:8025`.\n- Vite dev has no proxy; API base is `import.meta.env.VITE_API_BASE_URL ?? '/api'` (`frontend/src/api/client.ts`).\n\n#### **All User Messages**\n1. \"Твой список задач: изучить /docs/spec/AGENTS.md, прочесть общую информацию по проекту в docs/information_about_project.md, хранить информацию из 1-го файла в контексте на постоянной основе, ко второму - обращаться по мере необходимости. Так же, ты обязан писать логи в agent-log.md … После выполнения этих действий, в рамках теста напиши первый лог.\"\n2. \"Фротенд скинул нам свои файлики, в них не лезем, пробуем все поднять через докер, если возникают ошибки - фиксим. Главная задача сейчас - запустить проект\"\n3. \"Как запустить проект, просто поднять докер композе? Какие ссылки?\"\n4. \"Я запулил некоторые изменения. Говорят добавили тестовые данные, супер юзера и прочее. Где это лежит?\"\n5. \"Производил ручное тестирование сценария: сотрудник учебной части создает нового преподавателя… Переходя по ссылке, подтверждая email мне следует войти в аккаунт, но пароля никакого нет… Построй работу так: сначала ответь на этот вопрос на бекенде…\"\n6. \"В\" (scope: fixes + change + forgot + reset)\n7. \"y\" (approve plan)\n8. \"Сообщи мне все тестовые данные, которые у нас есть для входа в аккаунты\"\n9. \"Заявка от студента на регистрацию не падает преподавателю и текст указывает что должно оно упасть учебной части, но у нас функционал нацелен на то, что получает такие заявки преподаватель\"\n10. \"вариант а, и учти функционал для принятия приглашение уже реализован (есть интерфейсы в фронте), в учебную часть такое падать не должно\"\n11. \"заявок все равно нет, текст по прежнему указывает что мол заявка падает учебной части а не преподу\"\n12. \"Был добавлен новый функционал работы с отзывами на мероприятия… сейчас отзывы модерируют сами организаторы. Я хочу вынести модерацию в учебную часть… на фронте выбор оценки из выпадающего списка, аккуратно замени его на звезды.\"\n13. \"Proceed.\"\n14. \"надо исправить открытие кейсов, прокрутка правильная, но после этого возвращение к центру крутит в непонятное место и награду даёт другую (на фронте), сделай большую базу с данными чтобы можно было всё показывать, несколько групп пасс какие-нибудь образные кейсы и рабочие награды, задания и тд\"\n15. \"Proceed.\"\n16. \"Proceed.\"\n17. \"rate limiting сейчас слишком чувствительный, пофикси это, при обычном использовании, пользователь часто ловит too many request, хотелось бы пофиксить\"\n18. \"напиши логин и пароль для студента\"\n19. \"софрмируй список логинов и паролей для демонстрации программы(чтобы были и студенты, и преподы, и админ, и учебная часть)\"\n20. \"Напиши финальный README.md с полным описанием системы и тестовыми данными, так же опиши как собрать систему (хотя там только одна команда докера) для входа, удали 'битые данные' с данными по типу 'grsgsfesefsfesfesfes'.\"\n21. \"Proceed.\" (approval of the cleanup + README plan)\n\n#### **Files and Code Sections**\n\n- **`backend/src/main/java/com/ptu/backend/common/security/RateLimitFilter.java`**\n    - **Importance:** core of rate limiting; now distinguishes reads from writes.\n    - **Changes:** added `readOnly` scoping and `isReadOnly()` helper.\n    - **Code Snippet:**\n      ```java\n      boolean readOnly = isReadOnly(request);\n      String scope; String identity; AppProperties.Limit limit;\n      if (HttpMethod.POST.matches(request.getMethod()) && LOGIN_PATH.equals(path)) {\n          scope = \"login\"; identity = clientIp(request); limit = limits.login();\n      }\n      else if (currentPrincipal() instanceof UserPrincipal principal) {\n          scope = readOnly ? \"user-read\" : \"user\";\n          identity = principal.id().toString();\n          limit = readOnly ? limits.authenticatedReadOrFallback() : limits.authenticated();\n      }\n      else {\n          scope = readOnly ? \"ip-read\" : \"ip\";\n          identity = clientIp(request);\n          limit = readOnly ? limits.anonymousReadOrFallback() : limits.anonymous();\n      }\n      ...\n      private static boolean isReadOnly(HttpServletRequest request) {\n          return HttpMethod.GET.matches(request.getMethod()) || HttpMethod.HEAD.matches(request.getMethod());\n      }\n      ```\n- **`backend/src/main/java/com/ptu/backend/config/AppProperties.java`**\n    - **Importance:** config record for limits with fallback semantics.\n    - **Changes:** `RateLimit(boolean enabled, Limit login, Limit authenticated, Limit authenticatedRead, Limit anonymous, Limit anonymousRead)` + `authenticatedReadOrFallback()` / `anonymousReadOrFallback()`.\n- **`backend/src/main/resources/application.properties`**\n    - **Changes:** added\n      ```\n      app.rate-limit.authenticated-read.requests=${RATE_LIMIT_AUTHENTICATED_READ_REQUESTS:600}\n      app.rate-limit.authenticated-read.window=${RATE_LIMIT_AUTHENTICATED_READ_WINDOW:1m}\n      app.rate-limit.anonymous-read.requests=${RATE_LIMIT_ANONYMOUS_READ_REQUESTS:300}\n      app.rate-limit.anonymous-read.window=${RATE_LIMIT_ANONYMOUS_READ_WINDOW:1m}\n      ```\n- **`.env.example`** — same four new `RATE_LIMIT_*_READ_*` variables.\n- **`backend/src/test/java/com/ptu/backend/RateLimitIT.java`**\n    - **Changes:** replaced `authenticatedUserLimitIsEnforcedAfter120Requests` with `authenticatedUserWriteLimitIsEnforcedAfter120Requests` (120 POST `/api/academic/teacher-invites` as student → 403, 121st → 429) and added `authenticatedUserReadsUseSeparateHigherBudget` (130 GETs → 200, then POST → 400 proving write budget untouched). Result: 5/5 tests pass.\n- **`docs/spec/api.md`** — rate limit table expanded with `user-read` (600/1m) and `ip-read` (300/1m) rows + note about separate counters and fallback.\n- **`docs/demo-data.md`** — accounts table now has password column; student range corrected to `student2 … student48`; added per-group table and list of premium-pass students.\n- **`docs/agent-log.md`** — appended concise entries: rate limiting split; demo accounts list.\n- **`README.md`** (rewritten from one-line placeholder \"main branch, currently there's nothing to read\") — full doc: overview, roles/features, stack, architecture diagram + Compose services table, quick start (`cp .env.example .env`, `docker compose up -d --build`, URLs, reset via `down -v`), demo credentials table + groups + premium list + demo data composition, config env table, rate-limit table, backend/frontend dev & tests, repo structure, security.\n- **`backend/src/main/java/com/ptu/backend/dev/DevDemoDataSeeder.java`** — read to confirm demo dataset/credentials/premium mapping; unchanged.\n\n#### **Errors and Fixes**\n- `docker compose ps` empty / `docker compose exec` failed with \"failed to connect to the docker API\" — Docker Desktop was stopped; fixed with `open -a Docker` and waiting for `docker info`.\n- PostgreSQL query error `column u.email_verified does not exist`; `activities.organizer_id` / `created_by` don't exist (real column `teacher_id`) — corrected queries.\n- SQL in `psql` still connected but the earlier check of `reviews.moderated_by` counted demo `office@ptu.local` as non-student — verified moderator links before deletion.\n- README factual mismatch found: cosmetics count is **15**, not 12 (fixed pending); moderation queue was empty because manual testing had already moderated the 2 seeded pending reviews — restored both to `PENDING_MODERATION` (see Current Work).\n\n#### **Current Work and Next Step**\n\n**Current Work:**\nExecuting the approved cleanup + README task. Completed so far:\n1. DB backup saved: `/tmp/ptu_social_backup_20261112_145445.sql` (335 KB).\n2. Cleanup transaction executed successfully (single psql heredoc, `ON_ERROR_STOP=1`): deleted 14 junk users (`123@mail.go`, `aleksey@mail.ru`, `oleg@mail.ru`, `12345@mail.ru`, `alex_fomof@mail.ru`, `debgap@gapeev.ru`, `zhuchka@gryaznulki.net`, `gap@mail.ru`, `e2e.teacher1794222435@ptu.local`, `dmitriy@mail.ru`, `gapgap@mail.ru`, `gapgapgap@mail.ru`, `gjfighfi@mail.ru`, `ivan.test@ptu.local`), their reviews/participations/confirmations/submissions/schedule/tasks/activities/inventory, all `teacher_invites` (8), all `registration_requests` (12), and group `гапеев-21`. Verification: 53 users (48 STUDENT, 2 TEACHER, 1 ORGANIZER, 1 ACADEMIC_OFFICE, 1 ADMIN), 8 groups, 9 tasks, 7 activities, 15 reviews, 39 participations, 8 certificates, 9 submissions, zero orphan inventory/wallets.\n3. `README.md` written (full version described above). Known needed correction: change \"12 предметов косметики\" → \"15 предметов косметики\" (verified in DB: main student has 14 cases + 15 cosmetics).\n4. Restored moderation queue: `update reviews ... set status='PENDING_MODERATION', moderated_by=null, reward_awarded=false` → now 2 PENDING, 12 APPROVED, 1 REJECTED (total 15), making the README claim about a moderation queue with profanity true again.\n\n**Next Step:**\n1. Fix `README.md`: \"12 предметов косметики\" → \"15 предметов косметики\" (and re-check other numbers against DB: 9 tasks / 9 submissions, 15 reviews, 8 certificates, 14 cases).\n2. Smoke-test logins for all demo roles via `curl POST /api/auth/login` (student, teacher, teacher2, organizer, office, admin) and confirm key pages/endpoints return 200 after cleanup.\n3. Append a concise entry to `docs/agent-log.md` (request: README + delete broken data; decisions: backup → single transaction cleanup, exact deleted set, moderation queue restored; verification: counts).\n4. Mark todos completed (\"Бэкап БД и очистка мусорных данных\", \"Проверить итоговое состояние данных\", \"Написать README.md\", \"Лог в docs/agent-log.md\").",
+      "id": "7c195b14-927d-49df-b6ad-b392f9ed8033",
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 97061,
+        "receivedTokens": 3312,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "promptContext": {
+        "id": "a69a52f7-d8ac-49d6-b727-3de759979dd5",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484581370
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "reasoning",
+          "text": "Let me check the current state: todo items, README correctness, verify remaining steps.\n\nLet me start with todo---get_items and then verify README content."
+        },
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_xnex9ouyz7s2pvcaav4r86mn",
+          "toolName": "todo---get_items",
+          "input": {}
+        }
+      ],
+      "id": "d3535efb-72a3-43e6-8167-56a7522b90f0",
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 4261,
+        "receivedTokens": 132,
+        "cacheReadTokens": 6144,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484583348
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_xnex9ouyz7s2pvcaav4r86mn",
+          "toolName": "todo---get_items",
+          "output": {
+            "type": "json",
+            "value": {
+              "initialUserPrompt": "Напиши финальный README.md с полным описанием системы и тестовыми данными, опиши как собрать систему для входа, удали \"битые данные\" (аккаунты/записи вида \"grsgsfesefsfesfesfes\").",
+              "items": [
+                {
+                  "name": "Бэкап БД и очистка мусорных данных",
+                  "completed": false
+                },
+                {
+                  "name": "Проверить итоговое состояние данных",
+                  "completed": false
+                },
+                {
+                  "name": "Написать README.md",
+                  "completed": false
+                },
+                {
+                  "name": "Лог в docs/agent-log.md",
+                  "completed": false
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "id": "85b6753b-296b-4519-b3de-35ad6659c806",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484583348
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "reasoning",
+          "text": "Let me grep properly."
+        },
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_f5of2psc02pclj8zjlzzo7vc",
+          "toolName": "power---grep",
+          "input": {
+            "filePattern": "README.md",
+            "searchTerm": "косметик",
+            "contextLines": 3,
+            "caseSensitive": false,
+            "maxResults": 50,
+            "ignoreGitignore": false
+          }
+        },
+        {
+          "type": "tool-call",
+          "toolCallId": "call_01_xm1j5f4fa4uavqh14xzlb8w4",
+          "toolName": "power---bash",
+          "input": {
+            "command": "docker compose ps --format '{{.Service}}\\t{{.Status}}'",
+            "description": "Check docker compose status",
+            "timeout": 120000
+          }
+        }
+      ],
+      "id": "55d8217e-756c-4311-ac42-79506caca3c7",
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 629,
+        "receivedTokens": 146,
+        "cacheReadTokens": 10368,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484585858
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_f5of2psc02pclj8zjlzzo7vc",
+          "toolName": "power---grep",
+          "output": {
+            "type": "text",
+            "value": "## Grep Results: `косметик` in `README.md` (5 matches)\n\n### README.md (5 matches)\n- **L4:** `мероприятия и отзывы, внутренняя валюта, батл-пасс с кейсами и косметикой, обращения в учебную часть.`\n  ```\n  # ПТУ-Сошиал\n  \n  Университетская социально-образовательная платформа: учебные задания и их проверка, академический рейтинг,\n  мероприятия и отзывы, внутренняя валюта, батл-пасс с кейсами и косметикой, обращения в учебную часть.\n  \n  MVP по ТЗ 2.1: Spring Boot 3.5 + PostgreSQL 17 + Redis 7 + Mailpit, SPA на React 19 + MUI 7,\n  всё поднимается одной командой Docker Compose.\n  ```\n- **L13:** `| Студент | задания и решения, оценки, академический рейтинг, БОА/БУА, батл-пасс (уровни, free/premium награды), кейсы и инвентарь косметики, мероприятия и отзывы, справки, заявка на вступление в группу |`\n  ```\n  \n  | Роль | Что умеет |\n  | --- | --- |\n  | Студент | задания и решения, оценки, академический рейтинг, БОА/БУА, батл-пасс (уровни, free/premium награды), кейсы и инвентарь косметики, мероприятия и отзывы, справки, заявка на вступление в группу |\n  | Преподаватель | создание заданий, проверка решений (принять / вернуть на доработку), закреплённые дисциплины и группы, заявки на вступление в группу, расписание |\n  | Организатор | индивидуальные и групповые мероприятия, регистрация и подтверждение активности, отзывы участников |\n  | Учебная часть | приглашения преподавателей, дисциплины и назначения, заявки на регистрацию студентов, справки, модерация отзывов, расписание |\n  ```\n- **L79:** `| Студент-староста ИС-21 | \\`student@ptu.local\\` | \\`demo12345\\` | пасс 50 уровня (премиум), 14 кейсов, 12 предметов косметики, задания, справки, отзывы |`\n  ```\n  \n  | Роль | Email | Пароль | Что показать |\n  | --- | --- | --- | --- |\n  | Студент-староста ИС-21 | `student@ptu.local` | `demo12345` | пасс 50 уровня (премиум), 14 кейсов, 12 предметов косметики, задания, справки, отзывы |\n  | Староста ИС-22 | `student7@ptu.local` | `demo12345` | рейтинг 640, заявка на вступление в группу у преподавателя |\n  | Студент с премиум-пассом | `student25@ptu.local` | `demo12345` | premium-дорожка наград |\n  | Студент ЭК-21 | `student31@ptu.local` | `demo12345` | экономические дисциплины, мероприятия |\n  ```\n- **L109:** `- 8 кейсов (включая 7 тематических) с наградами всех типов косметики и рейтингами редкости;`\n  ```\n  Что есть в демо-базе:\n  \n  - 8 групп по 6 студентов, старосты, рейтинги 40…1250, кошельки 300…5000 жетонов и история транзакций;\n  - 8 кейсов (включая 7 тематических) с наградами всех типов косметики и рейтингами редкости;\n  ```\n- **L110:** `- батл-пасс: 50 уровней × 2 дорожки (free — кейсы, premium — косметика), часть наград уже получена;`\n  ```\n  - 9 заданий и 9 решений в статусах «принято», «на доработку», «сдано»;\n  - расписание на 8 групп и изменения расписания;\n  - 7 мероприятий (индивидуальные и групповые), регистрации групп, участия, 15 отзывов\n  ```\n"
+          }
+        },
+        {
+          "type": "tool-result",
+          "toolCallId": "call_01_xm1j5f4fa4uavqh14xzlb8w4",
+          "toolName": "power---bash",
+          "output": {
+            "type": "json",
+            "value": {
+              "stdout": "backend\tUp 4 minutes (healthy)\nmailpit\tUp 4 minutes (healthy)\nnginx\tUp 4 minutes (healthy)\npostgres\tUp 4 minutes (healthy)\nredis\tUp 4 minutes (healthy)\n",
+              "stderr": "",
+              "exitCode": 0
+            }
+          }
+        }
+      ],
+      "id": "7d90d7bb-2a71-4d0b-afb9-7d44c6b5c44f",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484585858
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "reasoning",
+          "text": "Fix README \"12 предметов косметики\" → \"15 предметов косметики\" (or whatever verified). Let me verify DB counts: inventory by type for student@ptu.local.\n\nAlso verify the \"14 кейсов\" claim. Let me query."
+        },
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_xzga3k7x48o9zribc3yl7f24",
+          "toolName": "power---bash",
+          "input": {
+            "command": "docker compose exec -T postgres psql -U ptu -d ptu_social -c \"\nselect case when i.item_type='CASE' then 'cases' else i.item_type end as type, count(*)\nfrom inventory_items i join users u on u.id=i.user_id where u.email='student@ptu.local' group by 1 order by 1;\"",
+            "description": "Verify inventory counts for demo student",
+            "timeout": 120000
+          }
+        }
+      ],
+      "id": "5f5a44b6-18d6-4978-9bf5-d366b9625d98",
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 1464,
+        "receivedTokens": 277,
+        "cacheReadTokens": 10880,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484588784
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_xzga3k7x48o9zribc3yl7f24",
+          "toolName": "power---bash",
+          "output": {
+            "type": "json",
+            "value": {
+              "stdout": "",
+              "stderr": "ERROR:  column i.user_id does not exist\nLINE 3: from inventory_items i join users u on u.id=i.user_id where ...\n                                                    ^\nHINT:  Perhaps you meant to reference the column \"i.case_id\".\n",
+              "exitCode": 1
+            }
+          }
+        }
+      ],
+      "id": "9b66e22b-55ad-4481-ab19-d4f7130814f7",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484588784
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "reasoning",
+          "text": "Need inventory schema. Let's check columns."
+        },
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_36ezjpd9e95pyxpuussqdgex",
+          "toolName": "power---bash",
+          "input": {
+            "command": "docker compose exec -T postgres psql -U ptu -d ptu_social -c \"\\d inventory_items\"",
+            "description": "Inspect inventory_items schema",
+            "timeout": 120000
+          }
+        }
+      ],
+      "id": "d11550c6-af48-4df0-aae9-1aca042df1e0",
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 689,
+        "receivedTokens": 111,
+        "cacheReadTokens": 12288,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484590620
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_36ezjpd9e95pyxpuussqdgex",
+          "toolName": "power---bash",
+          "output": {
+            "type": "json",
+            "value": {
+              "stdout": "                                            Table \"public.inventory_items\"\n       Column       |            Type             | Collation | Nullable |                   Default                   \n--------------------+-----------------------------+-----------+----------+---------------------------------------------\n id                 | bigint                      |           | not null | nextval('inventory_items_id_seq'::regclass)\n case_id            | bigint                      |           | not null | \n owner_student_id   | uuid                        |           | not null | \n item_name          | character varying(120)      |           | not null | \n rarity             | character varying(30)       |           | not null | \n quantity           | integer                     |           | not null | 1\n acquired_at        | timestamp without time zone |           | not null | CURRENT_TIMESTAMP\n item_kind          | character varying(16)       |           | not null | 'case'::character varying\n cosmetic_type      | character varying(32)       |           |          | \n source             | character varying(160)      |           | not null | 'Кейс'::character varying\n image_data         | bytea                       |           |          | \n image_content_type | character varying(100)      |           |          | \nIndexes:\n    \"inventory_items_pkey\" PRIMARY KEY, btree (id)\n    \"idx_inventory_case\" btree (case_id)\n    \"idx_inventory_owner\" btree (owner_student_id)\nCheck constraints:\n    \"ck_inventory_item_kind\" CHECK (item_kind::text = ANY (ARRAY['case'::character varying, 'cosmetic'::character varying]::text[]))\nForeign-key constraints:\n    \"fk_inventory_case\" FOREIGN KEY (case_id) REFERENCES cases(id)\nReferenced by:\n    TABLE \"student_profiles\" CONSTRAINT \"student_profiles_equipped_avatar_item_id_fkey\" FOREIGN KEY (equipped_avatar_item_id) REFERENCES inventory_items(id) ON DELETE SET NULL\n    TABLE \"student_profiles\" CONSTRAINT \"student_profiles_equipped_background_item_id_fkey\" FOREIGN KEY (equipped_background_item_id) REFERENCES inventory_items(id) ON DELETE SET NULL\n    TABLE \"student_profiles\" CONSTRAINT \"student_profiles_equipped_frame_item_id_fkey\" FOREIGN KEY (equipped_frame_item_id) REFERENCES inventory_items(id) ON DELETE SET NULL\n\n",
+              "stderr": "",
+              "exitCode": 0
+            }
+          }
+        }
+      ],
+      "id": "137f2530-0282-4b81-9d55-d367c6f3fdff",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484590620
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_wtv4kw6py6drvxyorkrtnnd5",
+          "toolName": "power---bash",
+          "input": {
+            "command": "docker compose exec -T postgres psql -U ptu -d ptu_social -c \"\nselect i.item_kind, coalesce(i.cosmetic_type,'-') as cosmetic_type, count(*) as items, sum(i.quantity) as qty\nfrom inventory_items i join users u on u.id=i.owner_student_id\nwhere u.email='student@ptu.local' group by 1,2 order by 1,2;\"",
+            "description": "Count inventory for demo student",
+            "timeout": 120000
+          }
+        }
+      ],
+      "id": "feb5c5e7-a0e3-402e-95a2-6b6666607fc9",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484592728
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_wtv4kw6py6drvxyorkrtnnd5",
+          "toolName": "power---bash",
+          "output": {
+            "type": "json",
+            "value": {
+              "stdout": " item_kind |   cosmetic_type    | items | qty \n-----------+--------------------+-------+-----\n case      | -                  |    14 |  14\n cosmetic  | avatar             |     4 |   4\n cosmetic  | avatar-frame       |     4 |   4\n cosmetic  | badge              |     4 |   4\n cosmetic  | profile-background |     3 |   3\n(5 rows)\n\n",
+              "stderr": "",
+              "exitCode": 0
+            }
+          }
+        }
+      ],
+      "id": "41aac6e6-919c-4595-91dc-2e469c08784b",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 698,
+        "receivedTokens": 172,
+        "cacheReadTokens": 12928,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "timestamp": 1794484592728
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "reasoning",
+          "text": "Cosmetics: 4+4+4+3 = 15 items. Good, so 14 cases and 15 cosmetics. Fix README line 79.\n\nThen smoke test logins. Then append log. Then mark todos.\n\nLet me fix README first."
+        },
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_6dwaglbs9he5ovv7tv7upbmf",
+          "toolName": "power---file_edit",
+          "input": {
+            "filePath": "README.md",
+            "searchTerm": "пасс 50 уровня (премиум), 14 кейсов, 12 предметов косметики, задания, справки, отзывы",
+            "replacementText": "пасс 50 уровня (премиум), 14 кейсов, 15 предметов косметики, задания, справки, отзывы",
+            "isRegex": false,
+            "replaceAll": false
+          }
+        },
+        {
+          "type": "tool-call",
+          "toolCallId": "call_01_0sgfgp79x1gz65flx9mkecyn",
+          "toolName": "power---bash",
+          "input": {
+            "command": "for u in student@ptu.local student7@ptu.local student25@ptu.local student31@ptu.local teacher@ptu.local teacher2@ptu.local organizer@ptu.local office@ptu.local admin@ptu.local; do\n  p=demo12345; [ \"$u\" = \"admin@ptu.local\" ] && p='AdminPtu2026!'; [ \"$u\" = \"office@ptu.local\" ] && p='office12345';\n  code=$(curl -s -o /tmp/login.json -w '%{http_code}' -X POST http://localhost/api/auth/login -H 'Content-Type: application/json' -d \"{\\\"email\\\":\\\"$u\\\",\\\"password\\\":\\\"$p\\\"}\");\n  role=$(python3 -c \"import json;d=json.load(open('/tmp/login.json'));print(d.get('user',{}).get('role') or d.get('role') or list(d.keys()))\" 2>/dev/null);\n  echo \"$u -> $code $role\";\ndone",
+            "description": "Smoke test demo logins",
+            "timeout": 120000
+          }
+        }
+      ],
+      "id": "dc0e8ee3-e3e0-4deb-9a3f-8ac03d2fba01",
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 347,
+        "receivedTokens": 489,
+        "cacheReadTokens": 13568,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484598399
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_6dwaglbs9he5ovv7tv7upbmf",
+          "toolName": "power---file_edit",
+          "output": {
+            "type": "text",
+            "value": "Successfully edited 'README.md'."
+          }
+        },
+        {
+          "type": "tool-result",
+          "toolCallId": "call_01_0sgfgp79x1gz65flx9mkecyn",
+          "toolName": "power---bash",
+          "output": {
+            "type": "json",
+            "value": {
+              "stdout": "student@ptu.local -> 200 STUDENT\nstudent7@ptu.local -> 200 STUDENT\nstudent25@ptu.local -> 200 STUDENT\nstudent31@ptu.local -> 200 STUDENT\nteacher@ptu.local -> 200 TEACHER\nteacher2@ptu.local -> 429 ['timestamp', 'status', 'error', 'message', 'path']\norganizer@ptu.local -> 429 ['timestamp', 'status', 'error', 'message', 'path']\noffice@ptu.local -> 429 ['timestamp', 'status', 'error', 'message', 'path']\nadmin@ptu.local -> 429 ['timestamp', 'status', 'error', 'message', 'path']\n",
+              "stderr": "",
+              "exitCode": 0
+            }
+          }
+        }
+      ],
+      "id": "ad42b1dc-bdf2-4208-a188-71debaef56b5",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484598399
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "reasoning",
+          "text": "429 due to login rate limit 5/min per IP from same IP (localhost). That's expected: 5 attempts per minute per IP. Wait — the nginx rewrites X-Forwarded-For to $remote_addr, so all these curl requests come from the docker gateway IP → same IP. So login limit 5/min hits. That's a real usability concern? In production, users come from different IPs, so fine. But during demos from one machine... Hmm, actually multiple different users logging in from the same IP (e.g., a demo on one laptop via localhost, or behind NAT) would hit 5 logins/min. That's plausible friction during demo. Should I raise login limit? The user earlier complained about rate limits being too sensitive. 5/min per IP was spec. But for demo scenarios, raising to e.g. 20/min could help. I shouldn't change without asking; but it's arguably related to the earlier complaint. Let me first wait 60s and retry remaining logins to verify credentials work.\n\nLet me sleep 61s then retry the remaining 4."
+        },
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_pse2hjjd5ald38i8ba4arsqm",
+          "toolName": "power---bash",
+          "input": {
+            "command": "sleep 62; for u in teacher2@ptu.local organizer@ptu.local office@ptu.local admin@ptu.local; do\n  p=demo12345; [ \"$u\" = \"admin@ptu.local\" ] && p='AdminPtu2026!'; [ \"$u\" = \"office@ptu.local\" ] && p='office12345';\n  code=$(curl -s -o /tmp/login.json -w '%{http_code}' -X POST http://localhost/api/auth/login -H 'Content-Type: application/json' -d \"{\\\"email\\\":\\\"$u\\\",\\\"password\\\":\\\"$p\\\"}\");\n  role=$(python3 -c \"import json;d=json.load(open('/tmp/login.json'));print(d.get('user',{}).get('role') or d.get('role') or list(d.keys()))\" 2>/dev/null);\n  echo \"$u -> $code $role\";\n  sleep 13;\ndone",
+            "description": "Retry remaining demo logins after rate-limit window",
+            "timeout": 180000
+          }
+        }
+      ],
+      "id": "8a57d269-45d1-4629-860d-9bd6c0e09698",
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 817,
+        "receivedTokens": 521,
+        "cacheReadTokens": 13824,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484718377
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_pse2hjjd5ald38i8ba4arsqm",
+          "toolName": "power---bash",
+          "output": {
+            "type": "json",
+            "value": {
+              "stdout": "teacher2@ptu.local -> 200 TEACHER\norganizer@ptu.local -> 200 ORGANIZER\noffice@ptu.local -> 200 ACADEMIC_OFFICE\nadmin@ptu.local -> 200 ADMIN\n",
+              "stderr": "",
+              "exitCode": 0
+            }
+          }
+        }
+      ],
+      "id": "c09d291a-8452-419d-88f4-6be75ec63443",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484718377
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "reasoning",
+          "text": "All logins work. But note: login limit 5/min per IP means demoing 9 accounts from one machine yields 429. Given the user's earlier complaint about too-sensitive rate limiting and that demo runs from one machine, I should raise login limit and mention it. Let me check the spec value and configuration. Spec said login 5/min per IP. Raising default to, say, 20/min is a config change plus docs and .env.example. It's a small, low-risk change that improves demo experience. But the user asked to just \"Proceed\" on README+cleanup. Changing login limit is beyond scope... but it directly affects the demo credentials flow. I'll ask? The instructions say act pragmatically, non-trivial changes need approval. This is a small config change. Hmm.\n\nBetter: report it and offer. Actually the user is going to demo the program; getting 429 while switching accounts on one machine is a real problem. I think making the login limit configurable via env (already is) and raising default to 20/min is justified — mention it in the response. But careful: altering spec'd security default. I'll mention and let them decide... but response style says concise, and they'd have to answer.\n\nI'll just do it? Risk: spec compliance (docs/spec/api.md states 5/min). Since user complained about sensitivity and demo is on one machine, raising to 20 is reasonable. However, `RateLimitIT` may assert login limit of 5. Let me check the test.\n\nLet me grep for login limit in tests and spec."
+        },
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_gipbgg0kmern8urtbeuzrs27",
+          "toolName": "power---grep",
+          "input": {
+            "filePattern": "backend/src/test/**/*.java",
+            "searchTerm": "login.*(5|limit)",
+            "contextLines": 4,
+            "caseSensitive": false,
+            "maxResults": 40,
+            "ignoreGitignore": false
+          }
+        }
+      ],
+      "id": "f95167b9-b712-4868-bd24-7b7363a7b448",
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 648,
+        "receivedTokens": 492,
+        "cacheReadTokens": 14592,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484723786
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_gipbgg0kmern8urtbeuzrs27",
+          "toolName": "power---grep",
+          "output": {
+            "type": "text",
+            "value": "## Grep Results: `login.*(5|limit)` in `backend/src/test/**/*.java` (1 matches)\n\n### backend/src/test/java/com/ptu/backend/RateLimitIT.java (1 match)\n- **L53:** `\t\tString wrongLogin = json(Map.of(\"email\", \"nobody-\" + uniqueEmail(\"login\"), \"password\", \"wrong12345\"));`\n  ```\n  \t}\n  \n  \t@Test\n  \tvoid sixthLoginAttemptReturns429WithApiErrorAndRetryAfter() throws Exception {\n  \t\tString wrongLogin = json(Map.of(\"email\", \"nobody-\" + uniqueEmail(\"login\"), \"password\", \"wrong12345\"));\n  \n  \t\tfor (int attempt = 1; attempt <= 5; attempt++) {\n  \t\t\tmockMvc.perform(post(\"/api/auth/login\").contentType(APPLICATION_JSON).content(wrongLogin))\n  \t\t\t\t\t.andExpect(status().isUnauthorized())\n  ```\n"
+          }
+        }
+      ],
+      "id": "75e0eea8-4b56-4f5f-874c-e5069ba477de",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484723786
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "reasoning",
+          "text": "The test asserts 5/min. Changing default would break the test. Since it's spec'd, I'll leave it and instead report the caveat: after 5 failed/any logins from the same IP per minute you may see 429 — but wait, it counts all login attempts including successful ones. So during a demo you can only log in 5 times per minute from one machine. That's a genuine annoyance for the demo the user wants.\n\nOptions: keep as-is and document in README (\"если логинитесь несколько раз подряд с одного IP, подождите минуту или задайте RATE_LIMIT_LOGIN_REQUESTS\"). Or raise default. I think documenting + env override is the safe minimal action, plus mention to user that I can raise it.\n\nActually, since the user's goal is demo, and the README's purpose is \"как собрать систему для входа\", adding a note is good. Let me check README for existing rate-limit section and whether it mentions login limit."
+        },
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_hxfc9ggbty7xwz0cvguv50pt",
+          "toolName": "power---grep",
+          "input": {
+            "filePattern": "README.md",
+            "searchTerm": "5 запросов|Rate limit|RATE_LIMIT_LOGIN",
+            "contextLines": 6,
+            "caseSensitive": false,
+            "maxResults": 40,
+            "ignoreGitignore": false
+          }
+        }
+      ],
+      "id": "95b5833f-1158-4e94-92ef-7642b8dbe963",
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 691,
+        "receivedTokens": 357,
+        "cacheReadTokens": 15232,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484727826
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_hxfc9ggbty7xwz0cvguv50pt",
+          "toolName": "power---grep",
+          "output": {
+            "type": "text",
+            "value": "## Grep Results: `5 запросов|Rate limit|RATE_LIMIT_LOGIN` in `README.md` (5 matches)\n\n### README.md (5 matches)\n- **L25:** `- **Хранилища:** PostgreSQL 17 (данные), Redis 7 (коды подтверждения email, rate limiting).`\n  ```\n  Староста — не отдельная роль, а признак `isGroupLeader` в профиле студента (подтверждение заявок группы,\n  регистрация группы на коллективные мероприятия).\n  \n  ## Стек\n  \n  - **Backend:** Java 21, Spring Boot 3.5 (Web, Security, Data JPA, Validation, Mail), Lombok, Flyway (V1–V19), `ddl-auto=validate`.\n  - **Хранилища:** PostgreSQL 17 (данные), Redis 7 (коды подтверждения email, rate limiting).\n  - **Frontend:** React 19, TypeScript, Vite 7, MUI 7, axios, react-router 7.\n  - **Почта:** Mailpit (SMTP + веб-интерфейс) для локальной разработки.\n  - **Инфраструктура:** Docker Compose, Nginx (SPA + reverse proxy на `/api`).\n  \n  ## Архитектура\n  \n  ```\n- **L47:** `| \\`redis\\` | \\`redis:7-alpine\\` | \\`${REDIS_PORT:-6379}\\` | коды email, счётчики rate limit, том \\`redisdata\\` |`\n  ```\n  \n  | Сервис | Образ / сборка | Порты | Назначение |\n  | --- | --- | --- | --- |\n  | `nginx` | `nginx/Dockerfile` (собирает SPA) | `${HTTP_PORT:-80}` | статика фронтенда, proxy `/api`, `/api/actuator/health` |\n  | `backend` | `backend/Dockerfile` (Maven → JRE 21) | внутренний 8080 | REST API, миграции Flyway, сидеры dev-данных |\n  | `postgres` | `postgres:17-alpine` | `${DB_PORT:-5432}` | основная БД, том `pgdata` |\n  | `redis` | `redis:7-alpine` | `${REDIS_PORT:-6379}` | коды email, счётчики rate limit, том `redisdata` |\n  | `mailpit` | `axllent/mailpit:v1.32` | `8025` (UI), `1025` (SMTP) | перехват писем в dev |\n  \n  ## Быстрый старт\n  \n  Требования: Docker Engine/Desktop с Compose v2, ~4 ГБ RAM, свободные порты 80, 5432, 6379, 8025.\n  \n  ```\n- **L136:** `Rate limiting (Redis, fixed window 1 минута):`\n  ```\n  | `SEED_OFFICE_EMAIL` / `SEED_OFFICE_PASSWORD` | `office@ptu.local` / `office12345` | аккаунт учебной части в dev |\n  | `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | `admin@ptu.local` / `AdminPtu2026!` | администратор в dev |\n  | `ADMIN_BOOTSTRAP_EMAIL` / `ADMIN_BOOTSTRAP_PASSWORD` | — | создание администратора на пустой БД (прод) |\n  | `RATE_LIMIT_*` | см. ниже | лимиты API |\n  | `REVIEW_REWARD_AMOUNT` / `REVIEW_MONTHLY_LIMIT` | `5` / `5` | награда и месячный лимит за одобренные отзывы |\n  \n  Rate limiting (Redis, fixed window 1 минута):\n  \n  | Scope | Лимит по умолчанию |\n  | --- | --- |\n  | `login` (POST `/api/auth/login`, по IP) | 5 / 1 мин |\n  | `user` (мутации `/api/**` с JWT) | 120 / 1 мин |\n  | `user-read` (GET/HEAD с JWT) | 600 / 1 мин |\n  ```\n- **L177:** `регистрация и коды email, инвайты преподавателей, кошелёк (идемпотентность), rate limiting,`\n  ```\n  Для разработки вне Docker задайте `VITE_API_BASE_URL=http://localhost/api` и добавьте origin dev-сервера\n  в `APP_CORS_ALLOWED_ORIGINS`. Штатный способ запуска — Docker Compose.\n  \n  ### Тесты\n  \n  `cd backend && ./mvnw verify` — интеграционные тесты на Testcontainers (PostgreSQL + Redis):\n  регистрация и коды email, инвайты преподавателей, кошелёк (идемпотентность), rate limiting,\n  справки, задания, отзывы, планировщики.\n  \n  ## Структура репозитория\n  \n  ```\n  backend/            Spring Boot API, миграции Flyway, dev-сидеры, тесты\n  ```\n- **L205:** `- Rate limiting по IP и пользователю, \\`429\\` + \\`Retry-After\\`, fail-open при недоступности Redis.`\n  ```\n  (рейтинги, лента), `review` (модерация отзывов), `common` (безопасность, ошибки), `config`, `dev`.\n  \n  ## Безопасность\n  \n  - JWT (HS256, TTL 24 ч), BCrypt для паролей; самостоятельная регистрация преподавателей запрещена — только инвайт.\n  - Коды подтверждения email — в Redis с TTL, попытками и лимитами отправки (3 / 15 мин, resend 1 / 60 с).\n  - Rate limiting по IP и пользователю, `429` + `Retry-After`, fail-open при недоступности Redis.\n  - Единый формат ошибок API (`timestamp`, `status`, `error`, `message`, `path`) для 400/401/403/409/429/503.\n  - Nginx перезаписывает `X-Forwarded-For` адресом клиента, чтобы нельзя было подделать IP и обойти лимит логина.\n  - Секреты задаются только через переменные окружения; `.env` не коммитится.\n  ```\n"
+          }
+        }
+      ],
+      "id": "aa015834-28c7-400d-a737-dbae6eb2925d",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484727826
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "reasoning",
+          "text": "Add a note near demo credentials about the login limit and how to raise it (env `RATE_LIMIT_LOGIN_REQUESTS`). Let me view README around line 79-100 to insert."
+        },
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_dmkzmnv1fvulo7ojuhky09bi",
+          "toolName": "power---file_read",
+          "input": {
+            "filePath": "README.md",
+            "withLines": true,
+            "lineOffset": 70,
+            "lineLimit": 50
+          }
+        }
+      ],
+      "id": "d2e7feb3-c5d2-47fc-94cc-d59ec225e8e9",
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 1900,
+        "receivedTokens": 138,
+        "cacheReadTokens": 15872,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484729809
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_dmkzmnv1fvulo7ojuhky09bi",
+          "toolName": "power---file_read",
+          "output": {
+            "type": "text",
+            "value": "71|\n72|Загружаются только в профиле `dev` двумя сидерами: `DevDataSeeder` (учебная часть, администратор)\n73|и `DevDemoDataSeeder` (полный демонстрационный набор, идемпотентен).\n74|\n75|Пароль студентов, преподавателей и организатора — `demo12345`.\n76|\n77|| Роль | Email | Пароль | Что показать |\n78|| --- | --- | --- | --- |\n79|| Студент-староста ИС-21 | `student@ptu.local` | `demo12345` | пасс 50 уровня (премиум), 14 кейсов, 15 предметов косметики, задания, справки, отзывы |\n80|| Староста ИС-22 | `student7@ptu.local` | `demo12345` | рейтинг 640, заявка на вступление в группу у преподавателя |\n81|| Студент с премиум-пассом | `student25@ptu.local` | `demo12345` | premium-дорожка наград |\n82|| Студент ЭК-21 | `student31@ptu.local` | `demo12345` | экономические дисциплины, мероприятия |\n83|| Студент БД-21 | `student43@ptu.local` | `demo12345` | староста, отзывы на модерации |\n84|| Преподаватель (IT) | `teacher@ptu.local` | `demo12345` | 8 заданий, решения в разных статусах, 8 групп |\n85|| Преподаватель (экономика) | `teacher2@ptu.local` | `demo12345` | вторая нагрузка, экономические дисциплины |\n86|| Организатор | `organizer@ptu.local` | `demo12345` | 7 мероприятий, регистрации групп, отзывы |\n87|| Учебная часть | `office@ptu.local` | `office12345` | модерация отзывов, справки, заявки на регистрацию, инвайты преподавателей |\n88|| Администратор | `admin@ptu.local` | `AdminPtu2026!` | кейсы, каталог наград пасса, сезоны |\n89|\n90|Остальные студенты — `student2@ptu.local` … `student48@ptu.local` (пароль `demo12345`), по 6 человек в группе:\n91|\n92|| Группа | Аккаунты | Староста |\n93|| --- | --- | --- |\n94|| ИС-21 | `student@ptu.local`, `student2` … `student6` | `student@ptu.local` |\n95|| ИС-22 | `student7` … `student12` | `student7@ptu.local` |\n96|| ИС-23 | `student13` … `student18` | `student13@ptu.local` |\n97|| ПИ-21 | `student19` … `student24` | `student19@ptu.local` |\n98|| ПИ-22 | `student25` … `student30` | `student25@ptu.local` |\n99|| ЭК-21 | `student31` … `student36` | `student31@ptu.local` |\n100|| ЭК-22 | `student37` … `student42` | `student37@ptu.local` |\n101|| БД-21 | `student43` … `student48` | `student43@ptu.local` |\n102|\n103|Премиум-пасс: `student@`, `student2@`, `student3@`, `student5@`, `student9@`, `student13@`,\n104|`student17@`, `student21@`, `student25@`, `student29@`, `student33@`, `student37@`, `student41@`, `student45@`.\n105|\n106|Что есть в демо-базе:\n107|\n108|- 8 групп по 6 студентов, старосты, рейтинги 40…1250, кошельки 300…5000 жетонов и история транзакций;\n109|- 8 кейсов (включая 7 тематических) с наградами всех типов косметики и рейтингами редкости;\n110|- батл-пасс: 50 уровней × 2 дорожки (free — кейсы, premium — косметика), часть наград уже получена;\n111|- 9 заданий и 9 решений в статусах «принято», «на доработку», «сдано»;\n112|- расписание на 8 групп и изменения расписания;\n113|- 7 мероприятий (индивидуальные и групповые), регистрации групп, участия, 15 отзывов\n114|  (включая очередь модерации с нецензурным текстом);\n115|- 8 справок во всех статусах (одна с PDF), 2 заявки на вступление в группу;\n116|- 53 аккаунта, без «мусорных» записей от ручного тестирования.\n117|\n118|## Конфигурация\n119|\n120|Все настройки — через переменные окружения (`.env`, шаблон — `.env.example`).\n...\nTotal lines in the file: 209"
+          }
+        }
+      ],
+      "id": "d4a6c3ec-8add-41a5-b2c2-e616463134fa",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484729809
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "reasoning",
+          "text": "Add note about login rate limit after password line (line 75) or after credentials table. Insert after line 88 (table) before line 90? Better after \"Пароль студентов...\" line: add note: \"При переключении между аккаунтами с одного IP действует лимит логина 5/мин — при 429 подождите минуту или задайте `RATE_LIMIT_LOGIN_REQUESTS` (например, 50) в `.env`.\"\n\nLet me verify env var names in application.properties: `app.rate-limit.login.requests=${RATE_LIMIT_LOGIN_REQUESTS:5}` presumably. Check."
+        },
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_7pzhyxqx9ast80oxsc3ba7qr",
+          "toolName": "power---grep",
+          "input": {
+            "filePattern": "backend/src/main/resources/application.properties",
+            "searchTerm": "rate-limit",
+            "contextLines": 2,
+            "caseSensitive": false,
+            "maxResults": 30,
+            "ignoreGitignore": false
+          }
+        }
+      ],
+      "id": "84a182b2-17d0-4ce3-b8fa-4c9d69906737",
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 1478,
+        "receivedTokens": 279,
+        "cacheReadTokens": 17664,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484733144
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_7pzhyxqx9ast80oxsc3ba7qr",
+          "toolName": "power---grep",
+          "output": {
+            "type": "text",
+            "value": "## Grep Results: `rate-limit` in `backend/src/main/resources/application.properties` (11 matches)\n\n### backend/src/main/resources/application.properties (11 matches)\n- **L47:** `app.rate-limit.enabled=${RATE_LIMIT_ENABLED:true}`\n  ```\n  app.admin-bootstrap.full-name=${ADMIN_BOOTSTRAP_FULL_NAME:Администратор}\n  # --- Rate limiting (Redis, fixed window) ---\n  app.rate-limit.enabled=${RATE_LIMIT_ENABLED:true}\n  ```\n- **L48:** `app.rate-limit.login.requests=${RATE_LIMIT_LOGIN_REQUESTS:5}`\n- **L49:** `app.rate-limit.login.window=${RATE_LIMIT_LOGIN_WINDOW:1m}`\n- **L50:** `app.rate-limit.authenticated.requests=${RATE_LIMIT_AUTHENTICATED_REQUESTS:120}`\n- **L51:** `app.rate-limit.authenticated.window=${RATE_LIMIT_AUTHENTICATED_WINDOW:1m}`\n- **L52:** `app.rate-limit.anonymous.requests=${RATE_LIMIT_ANONYMOUS_REQUESTS:60}`\n- **L53:** `app.rate-limit.anonymous.window=${RATE_LIMIT_ANONYMOUS_WINDOW:1m}`\n  ```\n  # Read-only requests (GET/HEAD) are counted separately: the SPA loads many images and lists per page.\n  ```\n- **L55:** `app.rate-limit.authenticated-read.requests=${RATE_LIMIT_AUTHENTICATED_READ_REQUESTS:600}`\n- **L56:** `app.rate-limit.authenticated-read.window=${RATE_LIMIT_AUTHENTICATED_READ_WINDOW:1m}`\n- **L57:** `app.rate-limit.anonymous-read.requests=${RATE_LIMIT_ANONYMOUS_READ_REQUESTS:300}`\n- **L58:** `app.rate-limit.anonymous-read.window=${RATE_LIMIT_ANONYMOUS_READ_WINDOW:1m}`\n  ```\n  # --- Reviews (currency for approved reviews) ---\n  app.reviews.reward-amount=${REVIEW_REWARD_AMOUNT:5}\n  ```\n"
+          }
+        }
+      ],
+      "id": "38194fa7-5d03-47df-abad-72a27fa7cf9c",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484733144
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_gqpu5s7gya9tubebfnld1wlw",
+          "toolName": "power---file_edit",
+          "input": {
+            "filePath": "README.md",
+            "searchTerm": "Пароль студентов, преподавателей и организатора — `demo12345`.",
+            "replacementText": "Пароль студентов, преподавателей и организатора — `demo12345`.\n\nПри переключении между аккаунтами с одного IP срабатывает лимит логина (5 / минуту): при `429`\nподождите минуту либо поднимите `RATE_LIMIT_LOGIN_REQUESTS` (например, до `50`) в `.env`.",
+            "isRegex": false,
+            "replaceAll": false
+          }
+        }
+      ],
+      "id": "db2d6e2b-6727-457f-8dd1-7c90dbbf9bed",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484736094
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_gqpu5s7gya9tubebfnld1wlw",
+          "toolName": "power---file_edit",
+          "output": {
+            "type": "text",
+            "value": "Successfully edited 'README.md'."
+          }
+        }
+      ],
+      "id": "b0dcf0b0-4631-4e0e-b1fa-e62edfbecb9d",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 896,
+        "receivedTokens": 206,
+        "cacheReadTokens": 19072,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "timestamp": 1794484736094
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "reasoning",
+          "text": "Also verify \"8 заданий\" claim for teacher@ (README says 8 заданий, teacher has 8 tasks; total 9). And group count 8. Fine — earlier verified 9 tasks total.\n\nNow check the docs/agent-log.md tail to append consistently."
+        },
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_lo3snoaa7ce6oqz25rdozs5g",
+          "toolName": "power---bash",
+          "input": {
+            "command": "tail -30 docs/agent-log.md",
+            "description": "Read tail of agent log",
+            "timeout": 30000
+          }
+        }
+      ],
+      "id": "8ef25d88-bef6-4f37-a049-ca1fc56c7e37",
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 225,
+        "receivedTokens": 141,
+        "cacheReadTokens": 19968,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484739066
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_lo3snoaa7ce6oqz25rdozs5g",
+          "toolName": "power---bash",
+          "output": {
+            "type": "json",
+            "value": {
+              "stdout": "  - Мат больше не авто-отклонение: `BlockedWordsReviewFilterStrategy.matchingWords` (нормализация `ё`→`е`) отдаёт найденные корни в `flaggedWords`; жёстко отклоняются только спам и длина.\n  - `ReviewService` — два конструктора → `@Autowired` на публичном (иначе Spring не поднимал контекст).\n  - Фронт: `Rating` (звёзды) вместо `TextField select`; страница `AcademicReviewModerationPage` + роут `/academic-office/reviews` и пункт меню; у организатора блок модерации отзывов удалён.\n- Проверка: `EventReviewModerationIT` 3/3; `ReviewModerationWorkflowTest` (+flag) и `ActivityReviewApiRulesTest` — зелёные; `docker compose build nginx` — OK.\n- `./mvnw verify`: 53/56 — падают 3 старых `CertificateRequestIT` (тесты не обновлены под новый workflow справок: `deliveryMethod` обязателен, `APPROVED`→`READY` требует PDF). Добавил в `createRequest` `deliveryMethod:\"PICKUP\"` (8→3 фейла); остальное — отдельной задачей.\n- Docs: `docs/spec/api.md` — добавлен раздел «Мероприятия и отзывы», актуализирован раздел справок.\n\n## 2026-11-12 — Кейсы (фронт) и большая демо-база\n- Запрос: после прокрутки кейс «возвращается» не к той карточке и выдаёт не ту награду; нужна большая база для демонстрации (группы, пасс, тематические кейсы с рабочими наградами, задания и т.д.).\n- Решения:\n  - `CampusPages.tsx` (`InventoryPage`): отказ от захардкоженного финального отступа. Победитель уже приходит с бэка (`openCase`), лента строится вокруг него; после прокрутки центр считается по реальной геометрии карточки-победителя в DOM (`offsetLeft + offsetWidth/2`), с перелётом 24–64 px и возвратом к ней же. Подсветка suspense — по индексу победителя. Поддержан `prefers-reduced-motion`.\n  - `DevDemoDataSeeder` (`@Profile(\"dev\")`, `@Order(2)`, `JdbcTemplate`, одна транзакция): 8 групп по 6 студентов, преподаватели/организатор, рейтинги, кошельки, 7 тематических кейсов с наградами и SVG-картинками в БД, пасс 50 уровней × free/premium, 9 заданий и 13 решений, расписание, 7 мероприятий с отзывами (включая очередь модерации), справки, заявки в группы. Сидер идемпотентен: маркер — предметы с источником `Демо-набор`.\n  - `DevDataSeeder` помечен `@Order(1)`.\n- Проверка: `./mvnw compile` — OK; `docker compose build nginx` (`tsc -b && vite build`) — OK; сиды: 67 users, 9 групп, 8 кейсов, 40 наград, 100 строк пасса, 13 заданий, 8 мероприятий, 16 отзывов, 10 справок, 134 предмета инвентаря. E2E: логин всех демо-ролей 200; открытие кейса списало 100 жетонов и выдало награду из своего каталога; взятие free/premium награды пасса — OK; очередь модерации у учебной части (3, одно с матом) — OK; картинки кейсов/наград/инвентаря — `image/svg+xml`.\n- Docs: `docs/demo-data.md` — аккаунты и что показывать.\n\n## 2026-11-12 — Rate limiting: разделение чтения и записи\n- Запрос: при обычном использовании пользователь часто получает `429`.\n- Причина: один счётчик на все `/api/**` (120/мин); SPA за одну страницу делает 130+ GET (каждая картинка — отдельный запрос к `/api/...`).\n- Решения:\n  - `GET`/`HEAD` считаются в отдельных ключах `user-read`/`ip-read`: 600/мин авторизованным, 300/мин анонимным; мутации — прежние 120/60/5 из ТЗ.\n  - `AppProperties.RateLimit` + `authenticatedReadOrFallback()`/`anonymousReadOrFallback()`; если `*_READ_*` не заданы — берётся общий лимит.\n  - Новые env: `RATE_LIMIT_AUTHENTICATED_READ_*`, `RATE_LIMIT_ANONYMOUS_READ_*` (`application.properties`, `.env.example`).\n- Проверка: `RateLimitIT` 5/5 (120 мутаций → 429; 130 GET → 200 и запись после них не блокируется); в Docker 200 GET `/api/workspace/student/tasks` — все 200.\n- Docs: `docs/spec/api.md` — таблица scope'ов.\n\n## 2026-11-12 — Список демо-аккаунтов\n- Запрос: список логинов/паролей для демонстрации (студенты, преподаватели, админ, учебная часть).\n- Решения: `docs/demo-data.md` — пароли в таблице, разбивка студентов по 8 группам, список премиум-пассов. Пароль демо-аккаунтов `demo12345`, `office@ptu.local/office12345`, `admin@ptu.local/AdminPtu2026!`.\n- Проверка: данные сверены с БД (`users`, `student_profiles`, `campus_pass_accounts`).\n",
+              "stderr": "",
+              "exitCode": 0
+            }
+          }
+        }
+      ],
+      "id": "90538b21-0d27-4f57-8d99-61e7043890da",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484739066
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "reasoning",
+          "text": "Now append log entry for README + cleanup. Concise. Include deleted set counts, verification.\n\nAlso need to check git status/README correctness for build instructions? Already written. Let me quickly re-read README fully once? It was written by me; a sanity check of the \"Быстрый старт\" section is worthwhile. Let me read lines 40-70 and 118-209 quickly to verify no broken claims after changes. Actually, moderate: read 118-209."
+        },
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_qd3mqnvlorbl3ry2sgv06a79",
+          "toolName": "power---file_read",
+          "input": {
+            "filePath": "README.md",
+            "withLines": true,
+            "lineOffset": 44,
+            "lineLimit": 75
+          }
+        }
+      ],
+      "id": "3571eca4-5970-470b-b932-578543dcca3a",
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 1733,
+        "receivedTokens": 194,
+        "cacheReadTokens": 20096,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484742654
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_qd3mqnvlorbl3ry2sgv06a79",
+          "toolName": "power---file_read",
+          "output": {
+            "type": "text",
+            "value": "45|| `backend` | `backend/Dockerfile` (Maven → JRE 21) | внутренний 8080 | REST API, миграции Flyway, сидеры dev-данных |\n46|| `postgres` | `postgres:17-alpine` | `${DB_PORT:-5432}` | основная БД, том `pgdata` |\n47|| `redis` | `redis:7-alpine` | `${REDIS_PORT:-6379}` | коды email, счётчики rate limit, том `redisdata` |\n48|| `mailpit` | `axllent/mailpit:v1.32` | `8025` (UI), `1025` (SMTP) | перехват писем в dev |\n49|\n50|## Быстрый старт\n51|\n52|Требования: Docker Engine/Desktop с Compose v2, ~4 ГБ RAM, свободные порты 80, 5432, 6379, 8025.\n53|\n54|```bash\n55|cp .env.example .env          # при необходимости поправьте пароли/порты\n56|docker compose up -d --build  # сборка образов и запуск всех сервисов\n57|docker compose ps             # дождитесь статуса healthy у backend/nginx\n58|```\n59|\n60|Адреса:\n61|\n62|- приложение — <http://localhost>\n63|- Mailpit (все письма: подтверждение email, инвайты преподавателей) — <http://localhost:8025>\n64|- проверка API — <http://localhost/api/actuator/health>\n65|\n66|Первый запуск автоматически применяет миграции и загружает демо-данные (профиль `dev`).\n67|Остановка: `docker compose down`. Полный сброс с пересозданием БД и повторным сидом:\n68|`docker compose down -v && docker compose up -d --build`.\n69|\n70|## Демо-данные\n71|\n72|Загружаются только в профиле `dev` двумя сидерами: `DevDataSeeder` (учебная часть, администратор)\n73|и `DevDemoDataSeeder` (полный демонстрационный набор, идемпотентен).\n74|\n75|Пароль студентов, преподавателей и организатора — `demo12345`.\n76|\n77|При переключении между аккаунтами с одного IP срабатывает лимит логина (5 / минуту): при `429`\n78|подождите минуту либо поднимите `RATE_LIMIT_LOGIN_REQUESTS` (например, до `50`) в `.env`.\n79|\n80|| Роль | Email | Пароль | Что показать |\n81|| --- | --- | --- | --- |\n82|| Студент-староста ИС-21 | `student@ptu.local` | `demo12345` | пасс 50 уровня (премиум), 14 кейсов, 15 предметов косметики, задания, справки, отзывы |\n83|| Староста ИС-22 | `student7@ptu.local` | `demo12345` | рейтинг 640, заявка на вступление в группу у преподавателя |\n84|| Студент с премиум-пассом | `student25@ptu.local` | `demo12345` | premium-дорожка наград |\n85|| Студент ЭК-21 | `student31@ptu.local` | `demo12345` | экономические дисциплины, мероприятия |\n86|| Студент БД-21 | `student43@ptu.local` | `demo12345` | староста, отзывы на модерации |\n87|| Преподаватель (IT) | `teacher@ptu.local` | `demo12345` | 8 заданий, решения в разных статусах, 8 групп |\n88|| Преподаватель (экономика) | `teacher2@ptu.local` | `demo12345` | вторая нагрузка, экономические дисциплины |\n89|| Организатор | `organizer@ptu.local` | `demo12345` | 7 мероприятий, регистрации групп, отзывы |\n90|| Учебная часть | `office@ptu.local` | `office12345` | модерация отзывов, справки, заявки на регистрацию, инвайты преподавателей |\n91|| Администратор | `admin@ptu.local` | `AdminPtu2026!` | кейсы, каталог наград пасса, сезоны |\n92|\n93|Остальные студенты — `student2@ptu.local` … `student48@ptu.local` (пароль `demo12345`), по 6 человек в группе:\n94|\n95|| Группа | Аккаунты | Староста |\n96|| --- | --- | --- |\n97|| ИС-21 | `student@ptu.local`, `student2` … `student6` | `student@ptu.local` |\n98|| ИС-22 | `student7` … `student12` | `student7@ptu.local` |\n99|| ИС-23 | `student13` … `student18` | `student13@ptu.local` |\n100|| ПИ-21 | `student19` … `student24` | `student19@ptu.local` |\n101|| ПИ-22 | `student25` … `student30` | `student25@ptu.local` |\n102|| ЭК-21 | `student31` … `student36` | `student31@ptu.local` |\n103|| ЭК-22 | `student37` … `student42` | `student37@ptu.local` |\n104|| БД-21 | `student43` … `student48` | `student43@ptu.local` |\n105|\n106|Премиум-пасс: `student@`, `student2@`, `student3@`, `student5@`, `student9@`, `student13@`,\n107|`student17@`, `student21@`, `student25@`, `student29@`, `student33@`, `student37@`, `student41@`, `student45@`.\n108|\n109|Что есть в демо-базе:\n110|\n111|- 8 групп по 6 студентов, старосты, рейтинги 40…1250, кошельки 300…5000 жетонов и история транзакций;\n112|- 8 кейсов (включая 7 тематических) с наградами всех типов косметики и рейтингами редкости;\n113|- батл-пасс: 50 уровней × 2 дорожки (free — кейсы, premium — косметика), часть наград уже получена;\n114|- 9 заданий и 9 решений в статусах «принято», «на доработку», «сдано»;\n115|- расписание на 8 групп и изменения расписания;\n116|- 7 мероприятий (индивидуальные и групповые), регистрации групп, участия, 15 отзывов\n117|  (включая очередь модерации с нецензурным текстом);\n118|- 8 справок во всех статусах (одна с PDF), 2 заявки на вступление в группу;\n119|- 53 аккаунта, без «мусорных» записей от ручного тестирования.\n...\nTotal lines in the file: 212"
+          }
+        }
+      ],
+      "id": "8ea8e596-b5b6-4f2f-b90b-6530432d3c8d",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484742654
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "reasoning",
+          "text": "Verify claim \"9 решений\" — earlier DB had 9 submissions after cleanup (deleted binary submissions). But README line 114 says \"9 заданий и 9 решений\". OK consistent. But line 87 says teacher has 8 заданий — earlier I said 8 tasks for teacher. Total 9 tasks; one by teacher2? Let's verify quickly. Also verify \"2 заявки на вступление в группу\" — registration_requests were deleted (12) — those are different from join requests (group join requests). Let me verify: group join requests count and tasks by teacher.\n\nAlso \"15 отзывов\" and \"8 справок\". Let me run one verification query batch."
+        },
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_4fqvwjiasqqgz2iik72v0rzb",
+          "toolName": "power---bash",
+          "input": {
+            "command": "docker compose exec -T postgres psql -U ptu -d ptu_social -c \"\nselect 'tasks_total' k, count(*)::text v from tasks\nunion all select 'tasks_teacher1', count(*)::text from tasks t join users u on u.id=t.teacher_id where u.email='teacher@ptu.local'\nunion all select 'submissions', count(*)::text from submissions\nunion all select 'reviews', count(*)::text from event_reviews\nunion all select 'reviews_pending', count(*)::text from event_reviews where status='PENDING_MODERATION'\nunion all select 'certificates', count(*)::text from certificate_requests\nunion all select 'join_requests', count(*)::text from group_join_requests\nunion all select 'activities', count(*)::text from activities\nunion all select 'users', count(*)::text from users\nunion all select 'groups', count(*)::text from study_groups;\" 2>&1 | head -30",
+            "description": "Verify README numbers against DB",
+            "timeout": 120000
+          }
+        }
+      ],
+      "id": "3f172f6d-912f-4e77-90e6-381229c42a3e",
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 1981,
+        "receivedTokens": 440,
+        "cacheReadTokens": 21760,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484747073
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_4fqvwjiasqqgz2iik72v0rzb",
+          "toolName": "power---bash",
+          "output": {
+            "type": "json",
+            "value": {
+              "stdout": "ERROR:  relation \"tasks\" does not exist\nLINE 2: select 'tasks_total' k, count(*)::text v from tasks\n                                                      ^\n",
+              "stderr": "",
+              "exitCode": 0
+            }
+          }
+        }
+      ],
+      "id": "56d38345-86db-4cd4-a6e6-7b389969d1a7",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484747073
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_n0mh3rl8y3g4m1scu7oq3efu",
+          "toolName": "power---bash",
+          "input": {
+            "command": "docker compose exec -T postgres psql -U ptu -d ptu_social -c \"\\dt\" | sed -n '1,80p'",
+            "description": "List tables",
+            "timeout": 120000
+          }
+        }
+      ],
+      "id": "3e521e00-50e4-428f-b61e-f4f644083eb0",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484749908
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_n0mh3rl8y3g4m1scu7oq3efu",
+          "toolName": "power---bash",
+          "output": {
+            "type": "json",
+            "value": {
+              "stdout": "                     List of relations\n Schema |               Name               | Type  | Owner \n--------+----------------------------------+-------+-------\n public | activities                       | table | ptu\n public | battle_pass_seasons              | table | ptu\n public | campus_case_reward_catalog       | table | ptu\n public | campus_event_group_registrations | table | ptu\n public | campus_group_confirmations       | table | ptu\n public | campus_pass_accounts             | table | ptu\n public | campus_pass_reward_catalog       | table | ptu\n public | campus_pass_reward_claims        | table | ptu\n public | campus_pass_seasons              | table | ptu\n public | campus_pass_settings             | table | ptu\n public | campus_runtime_catalog_config    | table | ptu\n public | campus_schedule_changes          | table | ptu\n public | campus_schedule_entries          | table | ptu\n public | cases                            | table | ptu\n public | certificate_request_documents    | table | ptu\n public | certificate_requests             | table | ptu\n public | departments                      | table | ptu\n public | disciplines                      | table | ptu\n public | faculties                        | table | ptu\n public | flyway_schema_history            | table | ptu\n public | inventory_items                  | table | ptu\n public | legacy_academic_rating_history   | table | ptu\n public | legacy_departments               | table | ptu\n public | legacy_disciplines               | table | ptu\n public | legacy_faculties                 | table | ptu\n public | legacy_groups                    | table | ptu\n public | legacy_submission_versions       | table | ptu\n public | legacy_submissions               | table | ptu\n public | legacy_tasks                     | table | ptu\n public | legacy_teacher_assignments       | table | ptu\n public | levels                           | table | ptu\n public | participations                   | table | ptu\n public | registration_requests            | table | ptu\n public | reviews                          | table | ptu\n public | semester_academic_ratings        | table | ptu\n public | semesters                        | table | ptu\n public | student_profiles                 | table | ptu\n public | study_groups                     | table | ptu\n public | teacher_assignments              | table | ptu\n public | teacher_invite_assignments       | table | ptu\n public | teacher_invites                  | table | ptu\n public | transactions                     | table | ptu\n public | users                            | table | ptu\n public | wallets                          | table | ptu\n public | workspace_submissions            | table | ptu\n public | workspace_tasks                  | table | ptu\n(46 rows)\n\n",
+              "stderr": "",
+              "exitCode": 0
+            }
+          }
+        }
+      ],
+      "id": "83a659e0-8b0c-4b88-b3a7-a89db7f3e2d6",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 561,
+        "receivedTokens": 107,
+        "cacheReadTokens": 23680,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "timestamp": 1794484749909
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_b2uqs1jcvcqg8j1ren1umbta",
+          "toolName": "power---bash",
+          "input": {
+            "command": "docker compose exec -T postgres psql -U ptu -d ptu_social -c \"\nselect 'tasks_total' k, count(*)::text v from workspace_tasks\nunion all select 'tasks_teacher1', count(*)::text from workspace_tasks t join users u on u.id=t.teacher_id where u.email='teacher@ptu.local'\nunion all select 'submissions', count(*)::text from workspace_submissions\nunion all select 'reviews', count(*)::text from reviews\nunion all select 'reviews_pending', count(*)::text from reviews where status='PENDING_MODERATION'\nunion all select 'certificates', count(*)::text from certificate_requests\nunion all select 'join_requests', count(*)::text from campus_group_confirmations\nunion all select 'activities', count(*)::text from activities\nunion all select 'users', count(*)::text from users\nunion all select 'groups', count(*)::text from study_groups;\"",
+            "description": "Verify README numbers against DB v2",
+            "timeout": 120000
+          }
+        }
+      ],
+      "id": "68f9e61f-3716-48e0-810d-8ced94e3125f",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484752862
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_b2uqs1jcvcqg8j1ren1umbta",
+          "toolName": "power---bash",
+          "output": {
+            "type": "json",
+            "value": {
+              "stdout": "        k        | v  \n-----------------+----\n tasks_total     | 9\n tasks_teacher1  | 8\n submissions     | 9\n reviews         | 15\n reviews_pending | 2\n certificates    | 8\n join_requests   | 2\n activities      | 7\n users           | 53\n groups          | 8\n(10 rows)\n\n",
+              "stderr": "",
+              "exitCode": 0
+            }
+          }
+        }
+      ],
+      "id": "c9a4acd9-6e7f-4988-ba3b-9bd4063cf3d8",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 791,
+        "receivedTokens": 286,
+        "cacheReadTokens": 24192,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "timestamp": 1794484752862
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "reasoning",
+          "text": "All numbers match README. Good.\n\nNow append the log entry concisely."
+        },
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_p2pl1puip9xfhrjrbc3ovgqt",
+          "toolName": "power---bash",
+          "input": {
+            "command": "cat >> docs/agent-log.md <<'EOF'\n\n## 2026-11-12 — README + очистка «битых» данных\n- Запрос: финальный `README.md` (описание, сборка/запуск, тестовые данные) и удаление мусорных аккаунтов/записей от ручного тестирования.\n- Решения:\n  - Бэкап: `pg_dump` → `/tmp/ptu_social_backup_20261112_145445.sql`.\n  - Одна транзакция (`ON_ERROR_STOP=1`): удалены 14 мусорных пользователей и их связанные строки (отзывы, участия, подтверждения, решения, расписание, задания, мероприятия, инвентарь), все `teacher_invites` (8), все `registration_requests` (12), группа «гапеев-21».\n  - Учебная часть — единственный модератор отзывов: 2 отзыва возвращены в `PENDING_MODERATION` (демо-очередь).\n  - `README.md` переписан: стек, архитектура/сервисы, quick start, роли, демо-аккаунты по группам, env-таблица, rate limit, dev/тесты, структура, безопасность.\n- Проверка: 53 users (48 STUDENT + 5 staff), 8 групп, 9 заданий/9 решений, 7 мероприятий, 15 отзывов (2 pending), 8 справок, 2 заявки в группу; логин всех 9 демо-ролей — 200; цифры в README сверены с БД (14 кейсов + 15 косметики).\n- Нюанс: лимит логина 5/мин на IP даёт `429` при быстром переключении аккаунтов с одной машины — в README добавлена подсказка про `RATE_LIMIT_LOGIN_REQUESTS`.\nEOF",
+            "description": "Append log entry",
+            "timeout": 30000
+          }
+        }
+      ],
+      "id": "5e889d1e-6676-4f9a-8887-3c8562aa59d9",
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 421,
+        "receivedTokens": 550,
+        "cacheReadTokens": 24960,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484757406
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_p2pl1puip9xfhrjrbc3ovgqt",
+          "toolName": "power---bash",
+          "output": {
+            "type": "json",
+            "value": {
+              "stdout": "",
+              "stderr": "",
+              "exitCode": 0
+            }
+          }
+        }
+      ],
+      "id": "014d2a96-6679-469b-acde-da5bb3ea4b0b",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484757406
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_4q7y01co08sxs6dv6topjhl4",
+          "toolName": "todo---update_item_completion",
+          "input": {
+            "name": "Бэкап БД и очистка мусорных данных",
+            "completed": true
+          }
+        },
+        {
+          "type": "tool-call",
+          "toolCallId": "call_01_1tpnecj3bfqxlkzt9r7lmydq",
+          "toolName": "todo---update_item_completion",
+          "input": {
+            "name": "Проверить итоговое состояние данных",
+            "completed": true
+          }
+        }
+      ],
+      "id": "e36f554b-cae3-4ba8-9e85-214ae7751da0",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484760625
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_4q7y01co08sxs6dv6topjhl4",
+          "toolName": "todo---update_item_completion",
+          "output": {
+            "type": "json",
+            "value": [
+              {
+                "name": "Бэкап БД и очистка мусорных данных",
+                "completed": false
+              },
+              {
+                "name": "Проверить итоговое состояние данных",
+                "completed": true
+              },
+              {
+                "name": "Написать README.md",
+                "completed": false
+              },
+              {
+                "name": "Лог в docs/agent-log.md",
+                "completed": false
+              }
+            ]
+          }
+        },
+        {
+          "type": "tool-result",
+          "toolCallId": "call_01_1tpnecj3bfqxlkzt9r7lmydq",
+          "toolName": "todo---update_item_completion",
+          "output": {
+            "type": "json",
+            "value": [
+              {
+                "name": "Бэкап БД и очистка мусорных данных",
+                "completed": false
+              },
+              {
+                "name": "Проверить итоговое состояние данных",
+                "completed": true
+              },
+              {
+                "name": "Написать README.md",
+                "completed": false
+              },
+              {
+                "name": "Лог в docs/agent-log.md",
+                "completed": false
+              }
+            ]
+          }
+        }
+      ],
+      "id": "6433a47a-0979-4163-b17b-d66ea767b529",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 612,
+        "receivedTokens": 128,
+        "cacheReadTokens": 25344,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "timestamp": 1794484760625
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "reasoning",
+          "text": "The first update returned completed:false for \"Бэкап...\" — maybe name mismatch? Actually the list shows \"Бэкап БД и очистка мусорных данных\" completed false. Hmm, first call set it true but result shows false? Maybe result is pre-update snapshot ordering. Second item shows true. Let me re-check get_items."
+        },
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_w7s73p5ve1sbnvzin4pjmyht",
+          "toolName": "todo---get_items",
+          "input": {}
+        }
+      ],
+      "id": "90076673-0ba7-4d9e-a136-ad3c24a89a21",
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 382,
+        "receivedTokens": 101,
+        "cacheReadTokens": 25856,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484763953
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_w7s73p5ve1sbnvzin4pjmyht",
+          "toolName": "todo---get_items",
+          "output": {
+            "type": "json",
+            "value": {
+              "initialUserPrompt": "Напиши финальный README.md с полным описанием системы и тестовыми данными, опиши как собрать систему для входа, удали \"битые данные\" (аккаунты/записи вида \"grsgsfesefsfesfesfes\").",
+              "items": [
+                {
+                  "name": "Бэкап БД и очистка мусорных данных",
+                  "completed": false
+                },
+                {
+                  "name": "Проверить итоговое состояние данных",
+                  "completed": true
+                },
+                {
+                  "name": "Написать README.md",
+                  "completed": false
+                },
+                {
+                  "name": "Лог в docs/agent-log.md",
+                  "completed": false
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "id": "c63457fd-acab-4f66-911b-fc8d33ff233b",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484763953
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_ia1klwp50gwyopno0y57sag3",
+          "toolName": "todo---update_item_completion",
+          "input": {
+            "name": "Бэкап БД и очистка мусорных данных",
+            "completed": true
+          }
+        }
+      ],
+      "id": "83e3aee1-7576-4fc8-a181-ef510458aa4c",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484766446
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_ia1klwp50gwyopno0y57sag3",
+          "toolName": "todo---update_item_completion",
+          "output": {
+            "type": "json",
+            "value": [
+              {
+                "name": "Бэкап БД и очистка мусорных данных",
+                "completed": true
+              },
+              {
+                "name": "Проверить итоговое состояние данных",
+                "completed": true
+              },
+              {
+                "name": "Написать README.md",
+                "completed": false
+              },
+              {
+                "name": "Лог в docs/agent-log.md",
+                "completed": false
+              }
+            ]
+          }
+        }
+      ],
+      "id": "67d9e423-6329-48a9-b0bb-1a5210ef891c",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 379,
+        "receivedTokens": 72,
+        "cacheReadTokens": 26112,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "timestamp": 1794484766446
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_wjtyo4n4tfpes72u9diucmfh",
+          "toolName": "todo---update_item_completion",
+          "input": {
+            "name": "Написать README.md",
+            "completed": true
+          }
+        }
+      ],
+      "id": "a11ef429-8623-43a9-91cc-2e26d28fac6b",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484768885
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_wjtyo4n4tfpes72u9diucmfh",
+          "toolName": "todo---update_item_completion",
+          "output": {
+            "type": "json",
+            "value": [
+              {
+                "name": "Бэкап БД и очистка мусорных данных",
+                "completed": true
+              },
+              {
+                "name": "Проверить итоговое состояние данных",
+                "completed": true
+              },
+              {
+                "name": "Написать README.md",
+                "completed": true
+              },
+              {
+                "name": "Лог в docs/agent-log.md",
+                "completed": false
+              }
+            ]
+          }
+        }
+      ],
+      "id": "788cb3a7-562d-4c7a-bce9-da92fbf45948",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 274,
+        "receivedTokens": 63,
+        "cacheReadTokens": 26368,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "timestamp": 1794484768885
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool-call",
+          "toolCallId": "call_00_4902rpk8xgiyd866pwh5gsql",
+          "toolName": "todo---update_item_completion",
+          "input": {
+            "name": "Лог в docs/agent-log.md",
+            "completed": true
+          }
+        }
+      ],
+      "id": "4d220c3e-4216-4bd8-aeb4-454127f0fdf8",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484771279
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool-result",
+          "toolCallId": "call_00_4902rpk8xgiyd866pwh5gsql",
+          "toolName": "todo---update_item_completion",
+          "output": {
+            "type": "json",
+            "value": [
+              {
+                "name": "Бэкап БД и очистка мусорных данных",
+                "completed": true
+              },
+              {
+                "name": "Проверить итоговое состояние данных",
+                "completed": true
+              },
+              {
+                "name": "Написать README.md",
+                "completed": true
+              },
+              {
+                "name": "Лог в docs/agent-log.md",
+                "completed": true
+              }
+            ]
+          }
+        }
+      ],
+      "id": "28552e26-df24-4d0f-9862-cdf50b0aae53",
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 160,
+        "receivedTokens": 65,
+        "cacheReadTokens": 26624,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "timestamp": 1794484771279
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Готово.\n\n- **Очистка:** удалены 14 мусорных аккаунтов со всеми связями, 8 `teacher_invites`, 12 `registration_requests`, группа «гапеев-21»; бэкап — `/tmp/ptu_social_backup_20261112_145445.sql`. Осталось: 53 пользователя, 8 групп, 9 заданий/9 решений, 7 мероприятий, 15 отзывов (2 на модерации), 8 справок.\n- **README.md** дописан: полное описание, быстрый старт, таблица демо-аккаунтов с паролями (студенты/преподы/организатор/учебная часть/админ), состав демо-базы, env и rate limit. Цифры сверены с БД (14 кейсов + 15 косметики).\n- **Смоук-тест логинов:** все 9 демо-ролей → 200.\n- Лог добавлен в `docs/agent-log.md`.\n\nНюанс: лимит логина 5/мин на IP — при быстром переключении аккаунтов с одной машины ловится `429`; в README указал поднять `RATE_LIMIT_LOGIN_REQUESTS` (могу изменить дефолт, если нужно)."
+        }
+      ],
+      "id": "964a52ad-3823-402c-9cdd-5031c0691ade",
+      "usageReport": {
+        "model": "openai-compatible/deepseek/deepseek-v4.1-flash-1017",
+        "sentTokens": 176,
+        "receivedTokens": 319,
+        "cacheReadTokens": 26752,
+        "cacheWriteTokens": 0,
+        "messageCost": 0,
+        "agentTotalCost": 0
+      },
+      "promptContext": {
+        "id": "acecd8c3-ca96-4cfb-9987-e4a52f1fafdb",
+        "userMessageId": "2f542a40-aa09-4355-8380-97983cab3f2e"
+      },
+      "timestamp": 1794484774973
+    }
+  ],
+  "contextFiles": [
+    {
+      "path": ".gitignore",
+      "readOnly": false
+    },
+    {
+      "path": "backend/.gitignore",
+      "readOnly": false
+    }
+  ]
+}

@@ -35,8 +35,5 @@ build/
 ### Project docs ###
 docs/
 .m2/
-AGENTS.md
-agent-logs.md
-backend/docs/agent-logs.md
-.aider-desk
+
 .env

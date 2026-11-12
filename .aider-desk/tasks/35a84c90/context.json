@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "contextMessages": [],
+  "contextFiles": [
+    {
+      "path": ".gitignore",
+      "readOnly": false
+    },
+    {
+      "path": "backend/.gitignore",
+      "readOnly": false
+    }
+  ]
+}

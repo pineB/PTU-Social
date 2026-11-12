@@ -1,0 +1,21 @@
+{
+  "initialUserPrompt": "Напиши финальный README.md с полным описанием системы и тестовыми данными, опиши как собрать систему для входа, удали \"битые данные\" (аккаунты/записи вида \"grsgsfesefsfesfesfes\").",
+  "items": [
+    {
+      "name": "Бэкап БД и очистка мусорных данных",
+      "completed": true
+    },
+    {
+      "name": "Проверить итоговое состояние данных",
+      "completed": true
+    },
+    {
+      "name": "Написать README.md",
+      "completed": true
+    },
+    {
+      "name": "Лог в docs/agent-log.md",
+      "completed": true
+    }
+  ]
+}

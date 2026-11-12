@@ -1,0 +1,24 @@
+{
+  "id": "cd5b12c7",
+  "baseDir": "/Users/dmitriy/IdeaProjects/PTU-Social",
+  "name": "Изучить документацию и настроить ведение логов",
+  "archived": false,
+  "aiderTotalCost": 0,
+  "agentTotalCost": 0,
+  "mainModel": "",
+  "currentMode": "agent",
+  "weakModelLocked": false,
+  "parentId": null,
+  "lastAgentProviderMetadata": {
+    "openai-compatible": {}
+  },
+  "agentProfileId": "default",
+  "provider": "openai-compatible",
+  "model": "deepseek/deepseek-v4.1-flash-1017",
+  "workingMode": "local",
+  "updatedAt": "2026-11-12T11:59:37.018Z",
+  "startedAt": "2026-11-12T11:54:32.484Z",
+  "state": "READY_FOR_REVIEW",
+  "createdAt": "2026-10-30T11:35:32.469Z",
+  "completedAt": "2026-11-12T11:59:37.018Z"
+}
